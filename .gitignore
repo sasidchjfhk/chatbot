@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.env
+*.log
+
+# FastAPI uploads and artifacts
+uploads/
+
+# Node / Frontend
+cyber-convo-main/node_modules/
+cyber-convo-main/dist/
+cyber-convo-main/.vite/
+cyber-convo-main/.cache/
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Tests / caches
+.pytest_cache/
+coverage/
+
+# Misc
+*.tmp
+*.swp
