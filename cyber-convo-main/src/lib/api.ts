@@ -12,8 +12,18 @@ export interface WebResult {
   content: string;
 }
 
+// Base URL for API calls in production. In development, Vite proxy maps 
+// "/api" to the backend, but in production we call the backend directly.
+const API_BASE = (import.meta as any).env?.VITE_API_BASE_URL?.replace(/\/$/, '') || '';
+const api = (path: string) => {
+  // In development, calls go to "/api/..." and are proxied. In production, we
+  // call the backend directly and must drop the "/api" prefix.
+  if (API_BASE) return `${API_BASE}${path.replace(/^\/api/, '')}`;
+  return path;
+};
+
 export async function webSearch(query: string, maxResults = 5): Promise<WebResult[]> {
-  const res = await fetch('/api/websearch', {
+  const res = await fetch(api('/api/websearch'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ query, max_results: maxResults }),
@@ -31,7 +41,7 @@ export async function sendChat(
   system_prompt?: string,
   apiKey?: string,
 ): Promise<ChatReply> {
-  const res = await fetch('/api/chat', {
+  const res = await fetch(api('/api/chat'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -50,13 +60,20 @@ export async function sendChat(
 export async function uploadFiles(files: File[]): Promise<UploadedFile[]> {
   const form = new FormData();
   for (const f of files) form.append('files', f);
-  const res = await fetch('/api/upload', { method: 'POST', body: form });
+  const res = await fetch(api('/api/upload'), { method: 'POST', body: form });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     throw new Error(text || `Upload failed: ${res.status}`);
   }
   const data = await res.json();
-  return (data?.files || []) as UploadedFile[];
+  const uploaded: UploadedFile[] = ((data?.files || []) as UploadedFile[]).map((f) => {
+    // Backend returns relative /uploads/...; prefix with API_BASE if provided
+    if (API_BASE && f.url?.startsWith('/')) {
+      return { ...f, url: `${API_BASE}${f.url}` };
+    }
+    return f;
+  });
+  return uploaded;
 }
 
 export async function streamChat(
@@ -73,7 +90,7 @@ export async function streamChat(
     onChunk?: (text: string) => void;
   }
 ): Promise<{ session_id?: string; text: string }> {
-  const res = await fetch('/api/chat/stream', {
+  const res = await fetch(api('/api/chat/stream'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
