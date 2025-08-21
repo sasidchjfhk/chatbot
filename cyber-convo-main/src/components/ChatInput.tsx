@@ -158,10 +158,13 @@ export default function ChatInput({ onSendMessage, disabled, prefill, isTyping }
   };
 
   return (
-    <div className="sticky bottom-0 p-4 glass border-t border-glass-border/20">
+    <div
+      className="sticky bottom-0 p-3 sm:p-4 glass border-t border-glass-border/20"
+      style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 0.75rem)' }}
+    >
       <div className="max-w-4xl mx-auto">
         <form onSubmit={handleSubmit} className="relative">
-          <div className="flex items-end gap-3">
+          <div className="flex items-end gap-2 sm:gap-3">
             {/* Voice Input Button */}
             <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
               <Button
@@ -170,7 +173,7 @@ export default function ChatInput({ onSendMessage, disabled, prefill, isTyping }
                 size="sm"
                 onClick={toggleRecording}
                 className={`
-                  btn-cyber h-12 w-12 p-0 relative overflow-hidden
+                  btn-cyber h-10 w-10 sm:h-12 sm:w-12 p-0 relative overflow-hidden
                   ${isRecording ? 'border-destructive text-destructive' : ''}
                 `}
               >
@@ -216,7 +219,7 @@ export default function ChatInput({ onSendMessage, disabled, prefill, isTyping }
 
               {/* Attachment Button */}
               <motion.div 
-                className="absolute right-14 top-3"
+                className="absolute right-14 top-2 sm:top-3"
                 whileHover={{ scale: 1.1 }}
                 whileTap={{ scale: 0.9 }}
               >
@@ -254,7 +257,7 @@ export default function ChatInput({ onSendMessage, disabled, prefill, isTyping }
 
               {/* Thinking Button */}
               <motion.div
-                className="absolute right-28 top-2"
+                className="absolute right-28 top-2 hidden sm:block"
                 whileHover={{ scale: 1.08 }}
                 whileTap={{ scale: 0.95 }}
               >
@@ -303,7 +306,7 @@ export default function ChatInput({ onSendMessage, disabled, prefill, isTyping }
 
               {/* Search Prefill Button */}
               <motion.div
-                className="absolute right-40 top-2"
+                className="absolute right-40 top-2 hidden sm:block"
                 whileHover={{ scale: 1.08 }}
                 whileTap={{ scale: 0.95 }}
               >
@@ -432,7 +435,7 @@ export default function ChatInput({ onSendMessage, disabled, prefill, isTyping }
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
-          className="flex gap-2 mt-3 flex-wrap"
+          className="hidden sm:flex gap-2 mt-3 flex-wrap"
         >
           {['Explain', 'Summarize', 'Code', 'Creative'].map((action) => (
             <Button

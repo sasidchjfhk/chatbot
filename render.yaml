@@ -1,0 +1,35 @@
+services:
+  - type: web
+    name: chatbot-backend
+    env: python
+    plan: free
+    rootDir: ./
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn server:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: OPENROUTER_MODEL
+        value: z-ai/glm-4.5-air:free
+      - key: TAVILY_API_KEY
+        sync: false
+      - key: PERSIST_SESSIONS
+        value: "true"
+
+  - type: static
+    name: chatbot-frontend
+    rootDir: ./cyber-convo-main/
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
+    headers:
+      - path: /**
+        name: Cache-Control
+        value: public, max-age=600
+    envVars:
+      - key: VITE_API_BASE_URL
+        fromService:
+          type: web
+          name: chatbot-backend
+          property: url

@@ -85,6 +85,12 @@ def health():
     return {"status": "ok"}
 
 
+# Minimal root route to avoid 404 at '/'
+@app.get("/")
+def root():
+    return {"status": "ok"}
+
+
 # ----------------------------
 # In-memory session store
 # ----------------------------

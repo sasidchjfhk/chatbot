@@ -60,7 +60,7 @@ export default function ChatArea({
             <div className="flex items-center gap-3">
               <HolographicAvatar size="md" isTyping={false} />
               <div>
-                <h1 className="text-xl font-bold bg-gradient-holographic bg-clip-text text-transparent">
+                <h1 className="text-lg sm:text-xl font-bold bg-gradient-holographic bg-clip-text text-transparent">
                   Swea Chat
                 </h1>
                 <p className="text-sm text-muted-foreground">
@@ -80,7 +80,7 @@ export default function ChatArea({
       </motion.header>
 
       {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-6">
+      <div className="flex-1 overflow-y-auto p-4 space-y-6 pb-28 sm:pb-24">
         <AnimatePresence mode="wait">
           {messages.length === 0 ? (
             <motion.div
@@ -161,7 +161,7 @@ export default function ChatArea({
       </div>
 
       {/* Floating elements for visual appeal */}
-      <div className="absolute top-20 right-8 opacity-30 pointer-events-none">
+      <div className="absolute top-20 right-8 opacity-30 pointer-events-none hidden md:block">
         <motion.div
           animate={{
             rotate: 360,
@@ -175,7 +175,7 @@ export default function ChatArea({
         />
       </div>
 
-      <div className="absolute bottom-32 left-8 opacity-20 pointer-events-none">
+      <div className="absolute bottom-32 left-8 opacity-20 pointer-events-none hidden md:block">
         <motion.div
           animate={{
             y: [-10, 10, -10],
