@@ -6,6 +6,22 @@ export interface StreamResponse {
   sessionId?: string;
 }
 
+export async function clearMemory(
+  session_id?: string,
+  apiKey?: string,
+): Promise<ChatReply> {
+  const res = await fetch(api('/api/chat'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message: '', session_id, clear: true, api_key: apiKey }),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(text || `Clear memory failed with ${res.status}`);
+  }
+  return (await res.json()) as ChatReply;
+}
+
 export interface WebResult {
   title: string;
   url: string;
@@ -83,11 +99,15 @@ export async function streamChat(
     system_prompt,
     apiKey,
     onChunk,
+    signal,
+    model,
   }: {
     session_id?: string;
     system_prompt?: string;
     apiKey?: string;
     onChunk?: (text: string) => void;
+    signal?: AbortSignal;
+    model?: string;
   }
 ): Promise<{ session_id?: string; text: string }> {
   const res = await fetch(api('/api/chat/stream'), {
@@ -95,7 +115,8 @@ export async function streamChat(
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ message, system_prompt, session_id, api_key: apiKey }),
+    body: JSON.stringify({ message, system_prompt, session_id, api_key: apiKey, model }),
+    signal,
   });
 
   if (!res.ok || !res.body) {

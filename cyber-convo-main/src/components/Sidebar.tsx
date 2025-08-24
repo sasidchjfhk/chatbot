@@ -23,6 +23,7 @@ interface SidebarProps {
   onApiKeyChange?: (value: string) => void;
   onReuseChat?: (chatId: string) => void;
   onDuplicateChat?: (chatId: string) => void;
+  onClearMemory?: () => void;
 }
 
 export default function Sidebar({
@@ -36,6 +37,7 @@ export default function Sidebar({
   onApiKeyChange,
   onReuseChat,
   onDuplicateChat,
+  onClearMemory,
 }: SidebarProps) {
   const [hoveredChat, setHoveredChat] = useState<string | null>(null);
 
@@ -199,6 +201,18 @@ export default function Sidebar({
               />
               <p className="text-[10px] text-muted-foreground mt-1">Stored locally in your browser. Not sent to server except with your chat requests.</p>
             </div>
+
+            
+            {/* Clear Memory */}
+            <Button
+              variant="ghost"
+              className="w-full justify-start text-muted-foreground hover:text-primary hover:bg-primary/10 mb-2"
+              onClick={() => onClearMemory?.()}
+              title="Clear server memory for this chat"
+            >
+              <RotateCcw className="h-4 w-4 mr-2" />
+              Clear memory
+            </Button>
             <div className="flex items-center gap-3 p-3 rounded-lg glass border border-glass-border/20 mb-3">
               <div className="w-8 h-8 rounded-full bg-gradient-primary flex items-center justify-center">
                 <User className="h-4 w-4 text-primary-foreground" />

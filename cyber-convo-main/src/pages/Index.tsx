@@ -4,7 +4,7 @@ import Background3D from '@/components/Background3D';
 import Sidebar from '@/components/Sidebar';
 import ChatArea from '@/components/ChatArea';
 import ChatInput from '@/components/ChatInput';
-import { sendChat, streamChat, webSearch, type WebResult } from '@/lib/api';
+import { sendChat, streamChat, webSearch, clearMemory, type WebResult } from '@/lib/api';
 
 interface Message {
   id: string;
@@ -28,15 +28,15 @@ export default function Index() {
       const saved = localStorage.getItem('cc_sidebar_open');
       if (saved !== null) return saved === '1';
     } catch {}
-    // Default: open on desktop, closed on small screens
-    if (typeof window !== 'undefined') {
-      return window.innerWidth >= 1024;
-    }
-    return true;
+    // Default: hidden; user can open via toggle
+    return false;
   });
+
+  // Temperature removed per request
   const [messages, setMessages] = useState<Message[]>([]);
   const [isTyping, setIsTyping] = useState(false);
   const [prefill, setPrefill] = useState<string | undefined>(undefined);
+  const [abortCtrl, setAbortCtrl] = useState<AbortController | null>(null);
   const [sessionId, setSessionId] = useState<string | undefined>(() => {
     try {
       return localStorage.getItem('session_id') || undefined;
@@ -62,6 +62,27 @@ export default function Index() {
         localStorage.removeItem('openrouter_api_key');
       }
     } catch {}
+  };
+
+  // Inline Edit-and-Resend feature removed per request
+
+  const handleClearMemory = async () => {
+    // Clear server memory for this session (if any), then clear local messages for the active chat
+    const currentSession = sessionId;
+    try {
+      if (currentSession) {
+        await clearMemory(currentSession, apiKey);
+      }
+    } catch (e) {
+      // Non-fatal: even if server clear fails, still clear local state
+    }
+    // Clear local messages for the active chat
+    setMessages([]);
+    if (activeChat !== 'current') saveMessages(activeChat, []);
+    // Keep the same chat tab, but drop the bound server session
+    setSessionId(undefined);
+    try { localStorage.removeItem('session_id'); } catch {}
+    setChats(prev => prev.map(c => c.id === activeChat ? { ...c, session_id: undefined, preview: '' } : c));
   };
 
   const handleReuseChat = (chatId: string) => {
@@ -113,9 +134,16 @@ export default function Index() {
     try { localStorage.setItem('cc_sidebar_open', sidebarOpen ? '1' : '0'); } catch {}
   }, [sidebarOpen]);
 
-  // Ensure sidebar starts opened now (user request). Users can still hide it; preference will persist.
+  // Ensure sidebar stays hidden on mobile (viewport < 1024)
   useEffect(() => {
-    setSidebarOpen(true);
+    const enforceMobileHidden = () => {
+      if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+        setSidebarOpen(false);
+      }
+    };
+    enforceMobileHidden();
+    window.addEventListener('resize', enforceMobileHidden);
+    return () => window.removeEventListener('resize', enforceMobileHidden);
   }, []);
 
   // Persist chats and active chat id
@@ -142,6 +170,8 @@ export default function Index() {
   const handleSendMessage = async (content: string) => {
     const text = content.trim();
     if (!text) return;
+    // Auto-hide sidebar while chatting
+    setSidebarOpen(false);
 
     // Determine if this is a /search and prepare a user-visible display text without JSON/code blocks
     const searchMatchEarly = text.match(/^\s*\/search\s+(.+)/i);
@@ -189,6 +219,8 @@ export default function Index() {
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       streaming: true,
     };
+    // Auto-hide sidebar when bot starts streaming
+    setSidebarOpen(false);
     setMessages(prev => {
       const next = [...prev, initialBot];
       if (activeChat !== 'current') saveMessages(activeChat, next);
@@ -214,11 +246,14 @@ export default function Index() {
 
     try {
       setIsTyping(true);
+      const controller = new AbortController();
+      setAbortCtrl(controller);
       const { session_id: newSession, text: fullText } = await streamChat(finalText, {
         session_id: sessionId,
-        system_prompt: undefined,
         apiKey,
         onChunk: (chunk) => {
+          // Ensure sidebar stays hidden while streaming
+          setSidebarOpen(false);
           setMessages(prev => {
             const next = [...prev];
             const idx = next.findIndex(m => m.id === botId);
@@ -229,6 +264,7 @@ export default function Index() {
             return next;
           });
         },
+        signal: controller.signal,
       });
 
       if (!sessionId && newSession) {
@@ -244,15 +280,24 @@ export default function Index() {
         return next;
       });
 
-      // Update chat preview from assistant reply
-      setChats(prev => prev.map(c => c.id === activeChat ? {
-        ...c,
-        preview: previewFrom(fullText || ''),
-        timestamp: nowLabel(),
-        session_id: newSession || c.session_id,
-      } : c));
+      // Update chat preview and auto-title from first assistant reply
+      setChats(prev => prev.map(c => {
+        if (c.id !== activeChat) return c;
+        const firstLine = (fullText || '').split('\n')[0].trim();
+        const newTitle = (c.title === 'New Chat' || !c.title || c.title.trim() === '')
+          ? (firstLine.slice(0, 40) || c.title)
+          : c.title;
+        return {
+          ...c,
+          title: newTitle,
+          preview: previewFrom(fullText || ''),
+          timestamp: nowLabel(),
+          session_id: newSession || c.session_id,
+        };
+      }));
     } catch (e: any) {
-      const errText = `Error: ${e?.message || 'Failed to get response'}`;
+      const aborted = e?.name === 'AbortError';
+      const errText = aborted ? 'Generation stopped.' : `Error: ${e?.message || 'Failed to get response'}`;
       setMessages(prev => {
         const next = prev.map(m => m.id === botId ? { ...m, streaming: false, content: errText } : m);
         if (activeChat !== 'current') saveMessages(activeChat, next);
@@ -260,7 +305,20 @@ export default function Index() {
       });
     } finally {
       setIsTyping(false);
+      setAbortCtrl(null);
     }
+  };
+
+  const handleStop = () => {
+    try { abortCtrl?.abort(); } catch {}
+  };
+
+  const handleRegenerate = () => {
+    if (isTyping) return;
+    // Find last user message
+    const lastUser = [...messages].reverse().find(m => m.sender === 'user');
+    if (!lastUser) return;
+    handleSendMessage(lastUser.content);
   };
 
 
@@ -298,6 +356,8 @@ export default function Index() {
     } else {
       handleSendMessage(text);
     }
+    // Hide sidebar when user initiates via suggestion
+    setSidebarOpen(false);
   };
 
   return (
@@ -319,6 +379,7 @@ export default function Index() {
           onApiKeyChange={handleApiKeyChange}
           onReuseChat={handleReuseChat}
           onDuplicateChat={handleDuplicateChat}
+          onClearMemory={handleClearMemory}
         />
 
         {/* Main Chat Area */}
@@ -334,6 +395,7 @@ export default function Index() {
             onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
             sidebarOpen={sidebarOpen}
             onSuggestionClick={handleSuggestionClick}
+            onNewChat={handleNewChat}
           />
           
           <ChatInput
@@ -341,6 +403,8 @@ export default function Index() {
             disabled={isTyping}
             prefill={prefill}
             isTyping={isTyping}
+            onStop={handleStop}
+            onRegenerate={handleRegenerate}
           />
         </motion.main>
       </div>

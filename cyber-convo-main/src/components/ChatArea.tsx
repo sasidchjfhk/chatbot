@@ -1,6 +1,6 @@
 import { useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Menu } from 'lucide-react';
+import { Menu, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import MessageBubble from './MessageBubble';
 import HolographicAvatar from './HolographicAvatar';
@@ -19,6 +19,7 @@ interface ChatAreaProps {
   onToggleSidebar: () => void;
   sidebarOpen: boolean;
   onSuggestionClick?: (text: string) => void;
+  onNewChat?: () => void;
 }
 
 export default function ChatArea({ 
@@ -27,6 +28,7 @@ export default function ChatArea({
   onToggleSidebar,
   sidebarOpen,
   onSuggestionClick,
+  onNewChat,
 }: ChatAreaProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -37,6 +39,8 @@ export default function ChatArea({
   useEffect(() => {
     scrollToBottom();
   }, [messages, isTyping]);
+
+  // Removed inline edit feature
 
   return (
     <div className="flex flex-col h-full relative">
@@ -52,7 +56,9 @@ export default function ChatArea({
               variant="ghost"
               size="sm"
               onClick={onToggleSidebar}
-              className="lg:hidden text-muted-foreground hover:text-primary"
+              className="text-muted-foreground hover:text-primary"
+              aria-label="Toggle sidebar"
+              title="Toggle sidebar"
             >
               <Menu className="h-5 w-5" />
             </Button>
@@ -80,7 +86,7 @@ export default function ChatArea({
       </motion.header>
 
       {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-6 pb-28 sm:pb-24">
+      <div className="flex-1 overflow-y-auto p-2 sm:p-3 space-y-3 sm:space-y-4 pb-28 sm:pb-20">
         <AnimatePresence mode="wait">
           {messages.length === 0 ? (
             <motion.div
@@ -151,14 +157,14 @@ export default function ChatArea({
                   isLast={index === messages.length - 1}
                 />
               ))}
-              
-              {/* Typing indicator removed for non-blinking UI */}
             </motion.div>
           )}
         </AnimatePresence>
 
         <div ref={messagesEndRef} />
       </div>
+
+      {/* Removed floating New Chat button */}
 
       {/* Floating elements for visual appeal */}
       <div className="absolute top-20 right-8 opacity-30 pointer-events-none hidden md:block">

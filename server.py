@@ -4,6 +4,7 @@ import json
 import threading
 from typing import Dict, List, Any
 import requests
+import time
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -70,6 +71,8 @@ class ChatRequest(BaseModel):
     system_prompt: str | None = None
     session_id: str | None = None
     clear: bool | None = None
+    model: str | None = None
+    temperature: float | None = None
     # Optional per-request OpenRouter API key provided by the client.
     # If omitted, the server will fall back to the environment variable.
     api_key: str | None = None
@@ -143,11 +146,23 @@ def chat(req: ChatRequest):
     # Determine session id (allow client-provided or generate deterministic per-process)
     session_id = req.session_id or os.urandom(8).hex()
 
+    # Allow pure clear without invoking the model when message is empty
+    if req.clear and not (req.message or "").strip():
+        with _SESSION_LOCK:
+            _SESSIONS.pop(session_id, None)
+            _persist_sessions_to_disk()
+        def _gen():
+            yield "Memory cleared."
+        return StreamingResponse(_gen(), media_type="text/plain", headers={"x-session-id": session_id})
+
     # Clear session on demand
     if req.clear:
         with _SESSION_LOCK:
             _SESSIONS.pop(session_id, None)
             _persist_sessions_to_disk()
+        # If this is a pure clear action (no message), return immediately without calling the model
+        if not (req.message or "").strip():
+            return ChatResponse(reply="Memory cleared.", session_id=session_id)
 
     url = f"{OPENROUTER_BASE_URL}/chat/completions"
     headers = {
@@ -163,9 +178,14 @@ def chat(req: ChatRequest):
         {"role": "user", "content": req.message},
     ]
     payload = {
-        "model": OPENROUTER_MODEL,
+        "model": (req.model or OPENROUTER_MODEL),
         "messages": messages,
     }
+    if req.temperature is not None:
+        try:
+            payload["temperature"] = float(req.temperature)
+        except Exception:
+            pass
 
     try:
         r = requests.post(url, headers=headers, json=payload, timeout=60)
@@ -248,37 +268,61 @@ def chat_stream(req: ChatRequest):
         "Content-Type": "application/json",
     }
     payload = {
-        "model": OPENROUTER_MODEL,
+        "model": (req.model or OPENROUTER_MODEL),
         "messages": messages,
         "stream": True,
     }
+    if req.temperature is not None:
+        try:
+            payload["temperature"] = float(req.temperature)
+        except Exception:
+            pass
 
     def event_generator():
         reply_accum = []
         try:
-            with requests.post(url, headers=headers, json=payload, stream=True, timeout=300) as resp:
-                if resp.status_code != 200:
-                    # Yield error and stop
-                    yield f"[ERROR] {resp.text}"
-                    return
-                for line in resp.iter_lines(decode_unicode=True):
-                    if not line:
-                        continue
-                    # OpenRouter streams Server-Sent Events lines starting with 'data: '
-                    if line.startswith("data: "):
-                        data_str = line[len("data: "):].strip()
-                        if data_str == "[DONE]":
-                            break
-                        try:
-                            obj = json.loads(data_str)
-                            delta = obj.get("choices", [{}])[0].get("delta", {})
-                            chunk = delta.get("content")
-                            if chunk:
-                                reply_accum.append(chunk)
-                                yield chunk
-                        except Exception:
-                            # If not JSON (rare), just forward text
-                            yield data_str
+            # Basic retry loop for connection setup issues (e.g., DNS)
+            last_err: Exception | None = None
+            for attempt in range(1, 4):
+                try:
+                    with requests.post(url, headers=headers, json=payload, stream=True, timeout=300) as resp:
+                        if resp.status_code != 200:
+                            yield f"[ERROR] Upstream error {resp.status_code}: {resp.text}"
+                            return
+                        for line in resp.iter_lines(decode_unicode=True):
+                            if not line:
+                                continue
+                            # OpenRouter streams Server-Sent Events lines starting with 'data: '
+                            if line.startswith("data: "):
+                                data_str = line[len("data: "):].strip()
+                                if data_str == "[DONE]":
+                                    break
+                                try:
+                                    obj = json.loads(data_str)
+                                    delta = obj.get("choices", [{}])[0].get("delta", {})
+                                    chunk = delta.get("content")
+                                    if chunk:
+                                        reply_accum.append(chunk)
+                                        yield chunk
+                                except Exception:
+                                    # If not JSON (rare), just forward text
+                                    yield data_str
+                        # If we reached here without exception, break out of retry loop
+                        last_err = None
+                        break
+                except requests.RequestException as e:
+                    last_err = e
+                    # Exponential backoff before retrying
+                    if attempt < 3:
+                        time.sleep(0.6 * (2 ** (attempt - 1)))
+                    else:
+                        # On final failure, emit a friendly error to the client
+                        msg = str(e)
+                        if 'getaddrinfo failed' in msg or 'NameResolutionError' in msg:
+                            yield "[ERROR] Cannot resolve OpenRouter host. Check your internet/DNS or OPENROUTER_BASE_URL."
+                        else:
+                            yield f"[ERROR] Network error: {msg}"
+                        return
         finally:
             # Persist history after stream completes
             full_reply = "".join(reply_accum).strip()

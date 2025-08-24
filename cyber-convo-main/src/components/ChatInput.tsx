@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, Mic, Paperclip, Sparkles, Search as SearchIcon } from 'lucide-react';
+import { Send, Mic, Paperclip, Sparkles, Search as SearchIcon, Square, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { uploadFiles, type UploadedFile } from '@/lib/api';
 
@@ -9,9 +9,11 @@ interface ChatInputProps {
   disabled?: boolean;
   prefill?: string;
   isTyping?: boolean;
+  onStop?: () => void;
+  onRegenerate?: () => void;
 }
 
-export default function ChatInput({ onSendMessage, disabled, prefill, isTyping }: ChatInputProps) {
+export default function ChatInput({ onSendMessage, disabled, prefill, isTyping, onStop, onRegenerate }: ChatInputProps) {
   const [message, setMessage] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const [showRocket, setShowRocket] = useState(false);
@@ -217,9 +219,9 @@ export default function ChatInput({ onSendMessage, disabled, prefill, isTyping }
                 }}
               />
 
-              {/* Attachment Button */}
+              {/* Attachment Button (desktop) */}
               <motion.div 
-                className="absolute right-14 top-2 sm:top-3"
+                className="hidden sm:block absolute right-[9rem] top-2 sm:top-3"
                 whileHover={{ scale: 1.1 }}
                 whileTap={{ scale: 0.9 }}
               >
@@ -245,19 +247,11 @@ export default function ChatInput({ onSendMessage, disabled, prefill, isTyping }
                     <Paperclip className="h-4 w-4" />
                   </Button>
                 </div>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  multiple
-                  accept="image/*,.pdf,.txt,.md,.doc,.docx,.ppt,.pptx"
-                  className="hidden"
-                  onChange={handleFilesSelected}
-                />
               </motion.div>
 
-              {/* Thinking Button */}
+              {/* Thinking Button (desktop) */}
               <motion.div
-                className="absolute right-28 top-2 hidden sm:block"
+                className="absolute right-[12rem] top-2 hidden sm:block"
                 whileHover={{ scale: 1.08 }}
                 whileTap={{ scale: 0.95 }}
               >
@@ -304,9 +298,9 @@ export default function ChatInput({ onSendMessage, disabled, prefill, isTyping }
                 </div>
               </motion.div>
 
-              {/* Search Prefill Button */}
+              {/* Search Prefill Button (desktop) */}
               <motion.div
-                className="absolute right-40 top-2 hidden sm:block"
+                className="absolute right-[15rem] top-2 hidden sm:block"
                 whileHover={{ scale: 1.08 }}
                 whileTap={{ scale: 0.95 }}
               >
@@ -334,8 +328,8 @@ export default function ChatInput({ onSendMessage, disabled, prefill, isTyping }
                 </div>
               </motion.div>
 
-              {/* Send Button */}
-              <div className="absolute right-2 top-2">
+              {/* Send Button (desktop) */}
+              <div className="hidden sm:block absolute right-2 top-2">
                 <AnimatePresence mode="wait">
                   {!showRocket ? (
                     <motion.div
@@ -400,8 +394,102 @@ export default function ChatInput({ onSendMessage, disabled, prefill, isTyping }
                   )}
                 </AnimatePresence>
               </div>
+
+              {/* Stop / Regenerate controls (desktop) */}
+              <div className="hidden sm:block absolute right-12 top-2">
+                {isTyping ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => onStop?.()}
+                    className="h-8 w-8 p-0 rounded-full text-muted-foreground hover:text-destructive"
+                    title="Stop generating"
+                    aria-label="Stop generating"
+                  >
+                    <Square className="h-4 w-4" />
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => onRegenerate?.()}
+                    className="h-8 w-8 p-0 rounded-full text-muted-foreground hover:text-primary"
+                    title="Regenerate response"
+                    aria-label="Regenerate response"
+                  >
+                    <RotateCcw className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            {/* Mobile toolbar */}
+            <div className="mt-2 flex sm:hidden justify-end items-center gap-2">
+              {/* Attachment (mobile) */}
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={handleAttachClick}
+                disabled={disabled}
+                className={`h-9 w-9 p-0 rounded-full relative ${isTyping ? 'ring-1 ring-primary/40' : ''} text-muted-foreground hover:text-primary`}
+                aria-label={isTyping ? 'AI is responding' : 'Attach files'}
+                title={isTyping ? 'AI is responding' : undefined}
+              >
+                <Paperclip className="h-4 w-4" />
+              </Button>
+
+              {/* Stop / Regenerate (mobile) */}
+              {isTyping ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onStop?.()}
+                  className="h-9 w-9 p-0 rounded-full text-muted-foreground hover:text-destructive"
+                  title="Stop generating"
+                  aria-label="Stop generating"
+                >
+                  <Square className="h-4 w-4" />
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onRegenerate?.()}
+                  className="h-9 w-9 p-0 rounded-full text-muted-foreground hover:text-primary"
+                  title="Regenerate response"
+                  aria-label="Regenerate response"
+                >
+                  <RotateCcw className="h-4 w-4" />
+                </Button>
+              )}
+
+              {/* Send (mobile) */}
+              <Button
+                type="submit"
+                disabled={!message.trim() || disabled}
+                className="btn-cyber h-9 w-9 p-0 rounded-full"
+                aria-label={isTyping ? 'AI is responding' : 'Send message'}
+                title={isTyping ? 'AI is responding' : undefined}
+              >
+                <Send className="h-4 w-4" />
+              </Button>
             </div>
           </div>
+
+          {/* Shared file input for attachments (desktop + mobile) */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept="image/*,.pdf,.txt,.md,.doc,.docx,.ppt,.pptx"
+            className="hidden"
+            onChange={handleFilesSelected}
+          />
 
           {/* Attachments preview */}
           {attachments.length > 0 && (
