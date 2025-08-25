@@ -1,5 +1,5 @@
 import { useRef, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { Menu, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import MessageBubble from './MessageBubble';
@@ -30,25 +30,71 @@ export default function ChatArea({
   onSuggestionClick,
   onNewChat,
 }: ChatAreaProps) {
+  const prefersReducedMotion = useReducedMotion();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const rafRef = useRef<number | null>(null);
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    });
   };
 
+  // Only auto-scroll when the number of messages changes (new message appended)
   useEffect(() => {
     scrollToBottom();
-  }, [messages, isTyping]);
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
+  }, [messages.length]);
 
   // Removed inline edit feature
 
   return (
-    <div className="flex flex-col h-full relative">
+    <div className="flex flex-col h-full min-h-0 relative">
+      {/* Light, non-distracting asteroid background */}
+      {!prefersReducedMotion && (
+        <div className="absolute inset-0 -z-10 pointer-events-none select-none overflow-hidden">
+          {/* Small drifting dots */}
+          <motion.div
+            aria-hidden
+            className="absolute top-10 left-8 w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-foreground/10 blur-[1px]"
+            animate={{ x: [0, 60, 0], y: [0, -40, 0], opacity: [0.12, 0.08, 0.12] }}
+            transition={{ duration: 28, repeat: Infinity, ease: 'easeInOut' }}
+          />
+          <motion.div
+            aria-hidden
+            className="absolute top-1/3 right-10 w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-foreground/10 blur-[1px]"
+            animate={{ x: [0, -70, 0], y: [0, -30, 0], opacity: [0.1, 0.06, 0.1] }}
+            transition={{ duration: 32, repeat: Infinity, ease: 'easeInOut', delay: 2 }}
+          />
+          <motion.div
+            aria-hidden
+            className="absolute bottom-16 left-12 w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-foreground/10 blur-[2px]"
+            animate={{ x: [0, 50, 0], y: [0, 30, 0], opacity: [0.08, 0.05, 0.08] }}
+            transition={{ duration: 35, repeat: Infinity, ease: 'easeInOut', delay: 1 }}
+          />
+          {/* Faint comet trails */}
+          <motion.div
+            aria-hidden
+            className="absolute top-24 right-24 h-px w-20 sm:w-28 bg-gradient-to-r from-transparent via-foreground/20 to-transparent"
+            animate={{ x: [0, -20, 0], opacity: [0.14, 0.06, 0.14] }}
+            transition={{ duration: 26, repeat: Infinity, ease: 'easeInOut' }}
+          />
+          <motion.div
+            aria-hidden
+            className="absolute bottom-24 left-24 h-px w-16 sm:w-24 bg-gradient-to-r from-transparent via-foreground/15 to-transparent"
+            animate={{ x: [0, 18, 0], opacity: [0.12, 0.05, 0.12] }}
+            transition={{ duration: 30, repeat: Infinity, ease: 'easeInOut', delay: 1.5 }}
+          />
+        </div>
+      )}
       {/* Header */}
       <motion.header
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="glass border-b border-glass-border/20 p-4 z-10"
+        className="p-4 z-10 bg-white/90 supports-[backdrop-filter]:bg-white/70 backdrop-blur border-b border-primary/10 shadow-md"
       >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -66,10 +112,16 @@ export default function ChatArea({
             <div className="flex items-center gap-3">
               <HolographicAvatar size="md" isTyping={false} />
               <div>
-                <h1 className="text-lg sm:text-xl font-bold bg-gradient-holographic bg-clip-text text-transparent">
+                <h1 className="text-lg sm:text-xl font-extrabold text-foreground">
                   Swea Chat
                 </h1>
-                <p className="text-sm text-muted-foreground">
+                <motion.div
+                  initial={{ scaleX: 0.6, opacity: 0.8 }}
+                  animate={{ scaleX: [0.6, 1, 0.85, 1], opacity: [0.8, 1, 0.9, 1] }}
+                  transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+                  className="h-1 rounded-full bg-gradient-to-r from-primary via-fuchsia-500 to-cyan-400 origin-left"
+                />
+                <p className="mt-1 text-sm text-muted-foreground">
                   Your futuristic AI assistant
                 </p>
               </div>
@@ -86,7 +138,7 @@ export default function ChatArea({
       </motion.header>
 
       {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto p-2 sm:p-3 space-y-3 sm:space-y-4 pb-28 sm:pb-20">
+      <div className="flex-1 min-h-0 overflow-y-auto p-2 sm:p-3 space-y-3 sm:space-y-4 pb-28 sm:pb-20">
         <AnimatePresence mode="wait">
           {messages.length === 0 ? (
             <motion.div

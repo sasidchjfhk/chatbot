@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { motion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 import { Copy, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import HolographicAvatar from './HolographicAvatar';
@@ -28,18 +28,19 @@ interface MessageBubbleProps {
 }
 
 export default function MessageBubble({ message, isLast }: MessageBubbleProps) {
+  const prefersReducedMotion = useReducedMotion();
   const [copied, setCopied] = useState(false);
   const [showActions, setShowActions] = useState(false);
   // Track which code block (by key) was recently copied
   const [copiedBlock, setCopiedBlock] = useState<string | null>(null);
+  const isUser = message.sender === 'user';
+  const isPlaceholder = message.sender === 'bot' && !!message.streaming && (message.content?.length || 0) === 0;
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(message.content);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
-
-  const isUser = message.sender === 'user';
 
   // Simple Markdown-ish rendering with code fences and inline code, while preserving URL/citation linking
   // Steps:
@@ -137,7 +138,7 @@ export default function MessageBubble({ message, isLast }: MessageBubbleProps) {
 
     // Headings renderer with distinct style (gradient for bot)
     const renderHeading = (level: number, text: string, k: string) => {
-      const base = 'font-semibold mb-1 mt-2';
+      const base = 'font-extrabold mb-1 mt-2 first:mt-0';
       const sizes: Record<number, string> = {
         1: 'text-xl md:text-2xl',
         2: 'text-lg md:text-xl',
@@ -146,7 +147,7 @@ export default function MessageBubble({ message, isLast }: MessageBubbleProps) {
         5: 'text-sm',
         6: 'text-xs',
       };
-      const colorBot = 'bg-gradient-to-r from-primary to-fuchsia-500 bg-clip-text text-transparent';
+      const colorBot = 'text-foreground';
       const colorUser = 'text-foreground';
       const cls = `${base} ${sizes[level] || sizes[3]} ${message.sender === 'bot' ? colorBot : colorUser}`;
       type HeadingTag = 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6';
@@ -163,9 +164,14 @@ export default function MessageBubble({ message, isLast }: MessageBubbleProps) {
         if (m) {
           out.push(renderHeading(m[1].length, m[2], keyBase + '-h-' + idx));
         } else if (line.trim().length > 0) {
-          out.push(<div key={keyBase + '-p-' + idx} className="mb-1">{renderInlineWithLinks(line, keyBase + '-' + idx)}</div>);
+          out.push(
+            <div key={keyBase + '-p-' + idx} className="mb-1">
+              {renderInlineWithLinks(line, keyBase + '-' + idx)}
+            </div>
+          );
         } else {
-          out.push(<div key={keyBase + '-br-' + idx} className="h-2" />);
+          // Do not render an explicit spacer for blank lines to avoid visible white gaps
+          // between message paragraphs or at the start/end of messages.
         }
       });
       return out;
@@ -237,15 +243,15 @@ export default function MessageBubble({ message, isLast }: MessageBubbleProps) {
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20, scale: 0.95 }}
+      initial={{ opacity: message.streaming ? 1 : 0, y: message.streaming ? 8 : 20, scale: message.streaming ? 1 : 0.95 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
-      transition={{ duration: 0.3, ease: 'easeOut' }}
+      transition={{ duration: prefersReducedMotion ? 0.18 : (message.streaming ? 0.22 : 0.35), ease: 'easeOut' }}
       className={`flex gap-3 ${isUser ? 'flex-row-reverse' : 'flex-row'} group`}
       onMouseEnter={() => setShowActions(true)}
       onMouseLeave={() => setShowActions(false)}
     >
       {/* Avatar */}
-      {!isUser && (
+      {!isUser && !isPlaceholder && (
         <div className="flex-shrink-0 hidden sm:block">
           <HolographicAvatar size="sm" isTyping={!!message.streaming} />
         </div>
@@ -254,39 +260,39 @@ export default function MessageBubble({ message, isLast }: MessageBubbleProps) {
       {/* Message Content */}
       <div className={`flex flex-col max-w-[100%] ${isUser ? 'items-end' : 'items-start'}`}>
         <motion.div
-          className={`
-            relative p-3 md:p-4 rounded-2xl backdrop-blur-xl border
-            ${isUser 
-              ? 'user-bubble ml-2' 
-              : 'bot-bubble mr-2'
-            }
-            ${message.streaming ? 'shadow-lg glow-pulse border-primary/50' : ''}
-          `}
-          whileHover={{ scale: 1.02 }}
-          transition={{ duration: 0.2 }}
+          className={
+            isPlaceholder
+              ? 'relative p-0 m-0 bg-transparent border-0 shadow-none backdrop-blur-0'
+              : `relative p-3 md:p-4 rounded-2xl backdrop-blur-sm border ${isUser ? 'user-bubble ml-2' : 'bot-bubble mr-[50px]'} ${message.streaming && !prefersReducedMotion ? 'shadow-md glow-pulse border-primary/50' : ''}`
+          }
+          whileHover={prefersReducedMotion ? undefined : { scale: isPlaceholder ? 1 : 1.01 }}
+          transition={{ duration: prefersReducedMotion ? 0.15 : 0.2 }}
         >
           {/* Message Text with linkified URLs and clickable citations */}
-          <motion.div
-            key={(message.content?.length || 0) + (message.streaming ? '-s' : '')}
-            initial={{ opacity: message.streaming ? 0.88 : 0.98 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.18, ease: 'easeOut' }}
-            className={`relative z-10 whitespace-pre-wrap break-words leading-relaxed tracking-[0.005em]
-              ${message.sender === 'bot' ? 'text-[0.98rem] md:text-[1.02rem] text-foreground/95' : 'text-sm md:text-[0.95rem]'}
-            `}
-          >
-            {nodes}
-            {message.streaming && (message.content?.length || 0) === 0 ? (
-              <span className="inline-flex items-center gap-0.5">
-                <span className="h-1.5 w-1.5 rounded-full bg-current animate-pulse" />
-                <span className="h-1.5 w-1.5 rounded-full bg-current animate-pulse" style={{ animationDelay: '120ms' }} />
-                <span className="h-1.5 w-1.5 rounded-full bg-current animate-pulse" style={{ animationDelay: '240ms' }} />
+          {isPlaceholder ? (
+            prefersReducedMotion ? (
+              <span className="inline-block w-8 h-2.5 rounded-full bg-foreground/30 animate-blink-simple" />
+            ) : (
+              <span className="inline-flex items-center" aria-label="AI is thinking" role="status">
+                <span className="thinking-pill w-14 h-3" />
               </span>
-            ) : null}
-          </motion.div>
+            )
+          ) : (
+            <motion.div
+              key={(message.content?.length || 0) + (message.streaming ? '-s' : '')}
+              initial={{ opacity: message.streaming ? 0.88 : 0.98 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: prefersReducedMotion ? 0.2 : (message.streaming ? 0.5 : 0.25), ease: 'easeOut' }}
+              className={`relative z-10 whitespace-pre-wrap break-words leading-relaxed tracking-[0.005em]
+                ${message.sender === 'bot' ? 'text-[0.98rem] md:text-[1.02rem] text-foreground/95' : 'text-sm md:text-[0.95rem]'}
+              `}
+            >
+              {nodes}
+            </motion.div>
+          )}
 
           {/* Action Buttons */}
-          {!isUser && (
+          {!isUser && !isPlaceholder && (
             <motion.div
               initial={{ opacity: 0, x: -10 }}
               animate={{ opacity: showActions ? 1 : 0, x: showActions ? 0 : -10 }}
@@ -309,28 +315,24 @@ export default function MessageBubble({ message, isLast }: MessageBubbleProps) {
           )}
 
           {/* Glow effect */}
-          <div className={`
-            absolute inset-0 rounded-2xl blur-xl opacity-20 -z-10
-            ${isUser ? 'bg-primary' : 'bg-secondary'}
-          `} />
+          {!isPlaceholder && !prefersReducedMotion && (
+            <div className={`
+              absolute inset-0 rounded-2xl blur-lg opacity-15 -z-10
+              ${isUser ? 'bg-primary' : 'bg-secondary'}
+            `} />
+          )}
 
           {/* Thin animated border during streaming */}
-          <div
-            className={`absolute inset-0 rounded-2xl pointer-events-none ${message.streaming ? '' : 'opacity-0'}`}
-          >
-            <div className={`absolute inset-0 rounded-2xl border-2 ${isUser ? 'border-primary/70' : 'border-secondary/70'} border-pulse`} />
-          </div>
+          {!isPlaceholder && !prefersReducedMotion && (
+            <div
+              className={`absolute inset-0 rounded-2xl pointer-events-none ${message.streaming ? '' : 'opacity-0'}`}
+            >
+              <div className={`absolute inset-0 rounded-2xl border ${isUser ? 'border-primary/60' : 'border-secondary/60'} border-pulse`} />
+            </div>
+          )}
         </motion.div>
 
-        {/* Timestamp pill with blinking dot */}
-        <div className={`mt-1 ${isUser ? 'mr-2 self-end' : 'ml-2 self-start'}`}>
-          <div className="flex items-center gap-1.5 text-[10px] sm:text-xs text-muted-foreground/80">
-            <span className="inline-block w-1.5 h-1.5 rounded-full bg-current blink-dot" />
-            <span className="px-2 py-0.5 rounded-full glass border border-glass-border/30">
-              {message.timestamp}
-            </span>
-          </div>
-        </div>
+        {/* Timestamp removed per request */}
 
         {/* Sources list (for bot messages) */}
         {!isUser && sources.length > 0 && (

@@ -167,8 +167,8 @@ export default function ChatInput({ onSendMessage, disabled, prefill, isTyping, 
       <div className="max-w-4xl mx-auto">
         <form onSubmit={handleSubmit} className="relative">
           <div className="flex items-end gap-2 sm:gap-3">
-            {/* Voice Input Button */}
-            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+            {/* Voice Input Button (desktop only) */}
+            <motion.div className="hidden sm:block" whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
               <Button
                 type="button"
                 variant="ghost"
@@ -202,8 +202,9 @@ export default function ChatInput({ onSendMessage, disabled, prefill, isTyping, 
                 rows={1}
                 className="
                   w-full input-cyber resize-none rounded-2xl pl-4 pr-14 py-3
+                  text-base
                   focus:ring-2 focus:ring-primary/50 focus:border-primary
-                  placeholder:text-muted-foreground
+                  placeholder:text-foreground/60
                   disabled:opacity-50 disabled:cursor-not-allowed
                   min-h-[48px] max-h-32
                 "
@@ -425,7 +426,7 @@ export default function ChatInput({ onSendMessage, disabled, prefill, isTyping, 
               </div>
             </div>
 
-            {/* Mobile toolbar */}
+            {/* Mobile toolbar: only Attachment + Send */}
             <div className="mt-2 flex sm:hidden justify-end items-center gap-2">
               {/* Attachment (mobile) */}
               <Button
@@ -440,33 +441,6 @@ export default function ChatInput({ onSendMessage, disabled, prefill, isTyping, 
               >
                 <Paperclip className="h-4 w-4" />
               </Button>
-
-              {/* Stop / Regenerate (mobile) */}
-              {isTyping ? (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => onStop?.()}
-                  className="h-9 w-9 p-0 rounded-full text-muted-foreground hover:text-destructive"
-                  title="Stop generating"
-                  aria-label="Stop generating"
-                >
-                  <Square className="h-4 w-4" />
-                </Button>
-              ) : (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => onRegenerate?.()}
-                  className="h-9 w-9 p-0 rounded-full text-muted-foreground hover:text-primary"
-                  title="Regenerate response"
-                  aria-label="Regenerate response"
-                >
-                  <RotateCcw className="h-4 w-4" />
-                </Button>
-              )}
 
               {/* Send (mobile) */}
               <Button

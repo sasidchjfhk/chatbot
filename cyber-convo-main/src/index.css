@@ -1,3 +1,4 @@
+/* stylelint-disable at-rule-no-unknown */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -6,16 +7,16 @@
 
 @layer base {
   :root {
-    /* Core Background & Text (softer, higher readability) */
-    --background: 222 40% 8%;
-    --foreground: 210 20% 92%;
+    /* Core Background & Text (switched to light theme) */
+    --background: 0 0% 100%; /* white */
+    --foreground: 0 0% 7%;   /* near-black */
 
     /* Glass & Card Effects */
-    --card: 222 32% 11%;
-    --card-foreground: 210 20% 94%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 7%;
     
-    --glass: 222 22% 14%;
-    --glass-border: 210 20% 28%;
+    --glass: 0 0% 100%;
+    --glass-border: 0 0% 85%;
 
     /* Primary (calm teal/blue) */
     --primary: 198 80% 55%;
@@ -32,9 +33,9 @@
     --accent-glow: 330 80% 80%;
     --accent-foreground: 222 40% 8%;
 
-    /* Muted Tones (less contrasty) */
-    --muted: 222 18% 16%;
-    --muted-foreground: 214 15% 70%;
+    /* Muted Tones (light neutrals) */
+    --muted: 0 0% 96%;
+    --muted-foreground: 0 0% 35%;
 
     /* Interactive States */
     --destructive: 0 70% 58%;
@@ -44,8 +45,8 @@
     --warning: 38 85% 55%;
 
     /* Borders & Inputs */
-    --border: 222 20% 22%;
-    --input: 222 18% 12%;
+    --border: 0 0% 88%;
+    --input: 0 0% 98%;
     --ring: 198 80% 55%;
 
     /* Special Effects */
@@ -54,11 +55,11 @@
     --glow-lg: 0 0 40px;
     --glow-xl: 0 0 60px;
 
-    /* Gradients (softened) */
+    /* Gradients (softened for light) */
     --gradient-primary: linear-gradient(135deg, hsl(198 80% 55%), hsl(210 70% 55%));
     --gradient-secondary: linear-gradient(135deg, hsl(262 70% 62%), hsl(280 65% 62%));
     --gradient-holographic: linear-gradient(45deg, hsl(198 80% 55%), hsl(262 70% 62%), hsl(330 70% 68%), hsl(198 80% 55%));
-    --gradient-glass: linear-gradient(135deg, hsla(222 22% 14% / 0.3), hsla(210 20% 28% / 0.08));
+    --gradient-glass: linear-gradient(135deg, hsla(0 0% 100% / 0.9), hsla(0 0% 100% / 0.7));
 
     /* Animation Durations */
     --transition-fast: 0.15s;
@@ -76,7 +77,8 @@
 
   body {
     @apply bg-background text-foreground overflow-x-hidden;
-    background: radial-gradient(ellipse at center, hsl(237 50% 6%) 0%, hsl(237 100% 4%) 100%);
+    /* Remove dark radial gradient for pure white background */
+    background: none;
     min-height: 100vh;
   }
 
@@ -174,8 +176,9 @@
 
   /* Input Styles */
   .input-cyber {
-    @apply glass border-muted text-foreground placeholder:text-muted-foreground;
-    background: linear-gradient(135deg, hsla(237 20% 15% / 0.5), hsla(237 30% 12% / 0.3));
+    /* High readability on light theme */
+    @apply border border-glass-border/30 text-foreground placeholder:text-muted-foreground bg-white;
+    background: hsl(0 0% 100%);
   }
 
   .input-cyber:focus {
@@ -241,6 +244,50 @@
 
   .caret-blink {
     animation: caretBlink 1s steps(1) infinite;
+  }
+
+  /* Thinking spinner (very light and subtle) */
+  .thinking-spinner {
+    @apply w-4 h-4 rounded-full;
+    border: 2px solid hsla(var(--foreground) / 0.12);
+    border-top-color: hsl(var(--primary));
+    border-right-color: hsl(var(--primary));
+  }
+
+  .animate-spin-slow {
+    animation: spinLite 1.2s linear infinite;
+  }
+  .animate-think-pulse {
+    animation: thinkPulse 1.8s ease-in-out infinite;
+  }
+  /* New: blinking variants for thinking indicator */
+  .animate-blink-soft {
+    animation: blinkSoft 1.2s ease-in-out infinite;
+  }
+  .animate-blink-simple {
+    animation: blinkSimple 1s linear infinite;
+  }
+
+  /* New: attractive shimmering pill for thinking indicator */
+  .thinking-pill {
+    display: inline-block;
+    border-radius: 9999px;
+    background-image: linear-gradient(
+      90deg,
+      hsla(var(--primary) / 0.18),
+      hsla(var(--primary) / 0.08) 40%,
+      hsla(var(--primary) / 0.18) 80%
+    );
+    background-size: 200% 100%;
+    box-shadow: 0 0 0 1px hsla(var(--primary) / 0.18), 0 6px 20px -10px hsla(var(--primary) / 0.35);
+    animation: shimmerMove 1.6s linear infinite, breathe 2.1s ease-in-out infinite;
+    will-change: transform, background-position;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .thinking-pill {
+      animation: blinkSoft 1.4s ease-in-out infinite;
+      background-size: 100% 100%;
+    }
   }
 }
 
@@ -311,4 +358,31 @@
 @keyframes caretBlink {
   0%, 100% { opacity: 0; }
   50% { opacity: 1; }
+}
+
+@keyframes spinLite {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes thinkPulse {
+  0%, 100% { opacity: 0.35; transform: scale(0.98); }
+  50% { opacity: 0.9; transform: scale(1); }
+}
+
+@keyframes blinkSoft {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
+@keyframes blinkSimple {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.85; }
+}
+
+@keyframes shimmerMove {
+  0% { background-position: 0% 0%; }
+  100% { background-position: -200% 0%; }
+}
+@keyframes breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.04); }
 }

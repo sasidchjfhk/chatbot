@@ -361,12 +361,12 @@ export default function Index() {
   };
 
   return (
-    <div className="h-screen flex overflow-hidden relative">
+    <div className="h-[100dvh] sm:h-screen flex overflow-hidden relative">
       {/* 3D Background */}
       <Background3D />
 
       {/* Main Layout */}
-      <div className="flex w-full relative z-10">
+      <div className="flex w-full relative z-10 min-h-0">
         {/* Sidebar */}
         <Sidebar
           isOpen={sidebarOpen}
@@ -384,7 +384,7 @@ export default function Index() {
 
         {/* Main Chat Area */}
         <motion.main
-          className="flex-1 flex flex-col min-w-0"
+          className="flex-1 flex flex-col min-w-0 min-h-0"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.5, delay: 0.2 }}
