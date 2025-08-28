@@ -61,6 +61,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["x-session-id", "content-type"],
 )
 
 # Static files for uploads (mounted after app and PROJECT_ROOT are defined)
