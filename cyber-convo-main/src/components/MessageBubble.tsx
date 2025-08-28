@@ -36,6 +36,24 @@ export default function MessageBubble({ message, isLast }: MessageBubbleProps) {
   const isUser = message.sender === 'user';
   const isPlaceholder = message.sender === 'bot' && !!message.streaming && (message.content?.length || 0) === 0;
 
+  // For bot messages: first non-empty line = Title, second non-empty line = Subtitle (optional)
+  // Body = rest. Only Title and Subtitle will be bold.
+  const { headingTitle, headingSubtitle, bodyContent } = useMemo(() => {
+    if (message.sender !== 'bot') return { headingTitle: null as string | null, headingSubtitle: null as string | null, bodyContent: message.content };
+    const raw = (message.content || '').split('\n');
+    const nonEmptyIdx: number[] = [];
+    for (let i = 0; i < raw.length; i++) {
+      if (raw[i].trim().length > 0) nonEmptyIdx.push(i);
+      if (nonEmptyIdx.length >= 2) break;
+    }
+    if (nonEmptyIdx.length === 0) return { headingTitle: null as string | null, headingSubtitle: null as string | null, bodyContent: message.content };
+    const title = raw[nonEmptyIdx[0]].trim();
+    const subtitle = nonEmptyIdx.length > 1 ? raw[nonEmptyIdx[1]].trim() : null;
+    const cut = nonEmptyIdx.length > 1 ? nonEmptyIdx[1] + 1 : nonEmptyIdx[0] + 1;
+    const body = raw.slice(cut).join('\n');
+    return { headingTitle: title || null, headingSubtitle: subtitle || null, bodyContent: body };
+  }, [message.sender, message.content]);
+
   const handleCopy = async () => {
     await navigator.clipboard.writeText(message.content);
     setCopied(true);
@@ -48,6 +66,7 @@ export default function MessageBubble({ message, isLast }: MessageBubbleProps) {
   // 2) For text segments: linkify URLs and make [n] clickable to first collected URLs
   // 3) For code segments: render <pre><code> with optional language from fence
   const { nodes, sources } = useMemo(() => {
+    const baseContent = message.sender === 'bot' ? (bodyContent ?? '') : (message.content ?? '');
     const urlRegex = /(https?:\/\/[^\s)]+[^\s.,)])/gi;
     const urls: string[] = [];
     const unique = (u: string) => {
@@ -55,22 +74,22 @@ export default function MessageBubble({ message, isLast }: MessageBubbleProps) {
     };
 
     // First pass: collect urls across whole content
-    for (const m of message.content.matchAll(urlRegex)) unique(m[0]);
+    for (const m of baseContent.matchAll(urlRegex)) unique(m[0]);
 
     // Split by code fences
     const fenceRegex = /```([a-zA-Z0-9_-]+)?\n([\s\S]*?)```/g;
     const segments: Array<{ type: 'code' | 'text'; lang?: string; value: string }> = [];
     let lastIndex = 0;
     let match: RegExpExecArray | null;
-    while ((match = fenceRegex.exec(message.content)) !== null) {
+    while ((match = fenceRegex.exec(baseContent)) !== null) {
       if (match.index > lastIndex) {
-        segments.push({ type: 'text', value: message.content.slice(lastIndex, match.index) });
+        segments.push({ type: 'text', value: baseContent.slice(lastIndex, match.index) });
       }
       segments.push({ type: 'code', lang: match[1]?.trim() || undefined, value: match[2] });
       lastIndex = fenceRegex.lastIndex;
     }
-    if (lastIndex < message.content.length) {
-      segments.push({ type: 'text', value: message.content.slice(lastIndex) });
+    if (lastIndex < baseContent.length) {
+      segments.push({ type: 'text', value: baseContent.slice(lastIndex) });
     }
 
     // Helper to render a single plain line with URL/citation/inline-code linkification
@@ -136,9 +155,9 @@ export default function MessageBubble({ message, isLast }: MessageBubbleProps) {
       });
     };
 
-    // Headings renderer with distinct style (gradient for bot)
+    // Headings renderer inside body. Do NOT bold for bot body (only title/subtitle are bold).
     const renderHeading = (level: number, text: string, k: string) => {
-      const base = 'font-extrabold mb-1 mt-2 first:mt-0';
+      const base = `${message.sender === 'bot' ? 'font-normal' : 'font-extrabold'} mb-1 mt-2 first:mt-0`;
       const sizes: Record<number, string> = {
         1: 'text-xl md:text-2xl',
         2: 'text-lg md:text-xl',
@@ -239,14 +258,14 @@ export default function MessageBubble({ message, isLast }: MessageBubbleProps) {
     });
 
     return { nodes: builtNodes, sources: urls };
-  }, [message.content, message.sender]);
+  }, [message.content, message.sender, bodyContent]);
 
   return (
     <motion.div
       initial={{ opacity: message.streaming ? 1 : 0, y: message.streaming ? 8 : 20, scale: message.streaming ? 1 : 0.95 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: prefersReducedMotion ? 0.18 : (message.streaming ? 0.22 : 0.35), ease: 'easeOut' }}
-      className={`flex gap-3 ${isUser ? 'flex-row-reverse' : 'flex-row'} group`}
+      className={`flex gap-2 sm:gap-3 ${isUser ? 'flex-row-reverse' : 'flex-row'} group`}
       onMouseEnter={() => setShowActions(true)}
       onMouseLeave={() => setShowActions(false)}
     >
@@ -262,8 +281,8 @@ export default function MessageBubble({ message, isLast }: MessageBubbleProps) {
         <motion.div
           className={
             isPlaceholder
-              ? 'relative p-0 m-0 bg-transparent border-0 shadow-none backdrop-blur-0'
-              : `relative p-3 md:p-4 rounded-2xl backdrop-blur-sm border ${isUser ? 'user-bubble ml-2' : 'bot-bubble mr-[50px]'} ${message.streaming && !prefersReducedMotion ? 'shadow-md glow-pulse border-primary/50' : ''}`
+              ? 'relative p-0 m-0 bg-transparent border-0 shadow-none'
+              : `relative p-2 sm:p-3 md:p-4 rounded-2xl border ${isUser ? 'user-bubble ml-2' : 'bot-bubble mr-[50px]'} `
           }
           whileHover={prefersReducedMotion ? undefined : { scale: isPlaceholder ? 1 : 1.01 }}
           transition={{ duration: prefersReducedMotion ? 0.15 : 0.2 }}
@@ -284,9 +303,18 @@ export default function MessageBubble({ message, isLast }: MessageBubbleProps) {
               animate={{ opacity: 1 }}
               transition={{ duration: prefersReducedMotion ? 0.2 : (message.streaming ? 0.5 : 0.25), ease: 'easeOut' }}
               className={`relative z-10 whitespace-pre-wrap break-words leading-relaxed tracking-[0.005em]
-                ${message.sender === 'bot' ? 'text-[0.98rem] md:text-[1.02rem] text-foreground/95' : 'text-sm md:text-[0.95rem]'}
+                ${message.sender === 'bot' ? 'text-[0.95rem] md:text-[1rem] text-foreground/80' : 'text-sm md:text-[0.95rem]'}
               `}
             >
+              {/* Bot title & subtitle */}
+              {!isUser && headingTitle ? (
+                <div className="mb-1">
+                  <div className="text-foreground font-extrabold text-base sm:text-lg">{headingTitle}</div>
+                  {headingSubtitle ? (
+                    <div className="text-foreground font-semibold text-[0.95rem] sm:text-base mt-0.5">{headingSubtitle}</div>
+                  ) : null}
+                </div>
+              ) : null}
               {nodes}
             </motion.div>
           )}
@@ -314,22 +342,7 @@ export default function MessageBubble({ message, isLast }: MessageBubbleProps) {
             </motion.div>
           )}
 
-          {/* Glow effect */}
-          {!isPlaceholder && !prefersReducedMotion && (
-            <div className={`
-              absolute inset-0 rounded-2xl blur-lg opacity-15 -z-10
-              ${isUser ? 'bg-primary' : 'bg-secondary'}
-            `} />
-          )}
-
-          {/* Thin animated border during streaming */}
-          {!isPlaceholder && !prefersReducedMotion && (
-            <div
-              className={`absolute inset-0 rounded-2xl pointer-events-none ${message.streaming ? '' : 'opacity-0'}`}
-            >
-              <div className={`absolute inset-0 rounded-2xl border ${isUser ? 'border-primary/60' : 'border-secondary/60'} border-pulse`} />
-            </div>
-          )}
+          {/* Removed glow and animated border for a flat look */}
         </motion.div>
 
         {/* Timestamp removed per request */}

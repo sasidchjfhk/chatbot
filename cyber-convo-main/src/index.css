@@ -138,11 +138,11 @@
   }
 
   .bot-bubble {
-    @apply glass border-secondary/30;
-    background: linear-gradient(135deg, hsla(270 100% 60% / 0.1), hsla(300 100% 70% / 0.05));
-    box-shadow: 
-      0 4px 20px hsla(var(--secondary) / 0.2),
-      inset 0 1px 0 hsla(var(--secondary) / 0.3);
+    /* Flat white bubble with neutral border */
+    @apply border bg-white;
+    background: #fff;
+    border-color: hsl(var(--glass-border) / 0.3);
+    box-shadow: none;
   }
 
   /* Button Variants */
@@ -211,6 +211,50 @@
 }
 
 @layer utilities {
+  /* Subtle animated starfield over white background */
+  .starfield {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+  }
+
+  .starfield, .starfield::before, .starfield::after {
+    content: '';
+    display: block;
+    position: absolute;
+    inset: -20% -20% -20% -20%;
+    pointer-events: none;
+    background-repeat: repeat;
+    background-size: 200px 200px, 300px 300px, 450px 450px;
+    background-image:
+      radial-gradient(1px 1px at 20px 30px, hsla(var(--foreground) / 0.12) 70%, transparent 72%),
+      radial-gradient(1px 1px at 100px 120px, hsla(var(--foreground) / 0.08) 70%, transparent 72%),
+      radial-gradient(1.2px 1.2px at 160px 80px, hsla(var(--foreground) / 0.06) 70%, transparent 72%);
+    animation: starScroll 45s linear infinite;
+  }
+
+  .starfield::before {
+    background-size: 260px 260px, 380px 380px, 540px 540px;
+    opacity: 0.5;
+    animation-duration: 70s;
+  }
+
+  .starfield::after {
+    background-size: 160px 160px, 240px 240px, 360px 360px;
+    opacity: 0.35;
+    animation-duration: 30s;
+  }
+
+  @keyframes starScroll {
+    from { transform: translateY(0); }
+    to { transform: translateY(-200px); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .starfield, .starfield::before, .starfield::after {
+      animation: none;
+    }
+  }
   /* 3D Transform Utilities */
   .transform-3d {
     transform-style: preserve-3d;

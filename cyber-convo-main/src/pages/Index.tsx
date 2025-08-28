@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import Background3D from '@/components/Background3D';
 import Sidebar from '@/components/Sidebar';
 import ChatArea from '@/components/ChatArea';
 import ChatInput from '@/components/ChatInput';
@@ -33,10 +32,26 @@ export default function Index() {
   });
 
   // Temperature removed per request
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<Message[]>(() => {
+    try {
+      const saved = localStorage.getItem('current_chat_messages');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  });
   const [isTyping, setIsTyping] = useState(false);
   const [prefill, setPrefill] = useState<string | undefined>(undefined);
   const [abortCtrl, setAbortCtrl] = useState<AbortController | null>(null);
+  
+  // Save messages to localStorage whenever they change
+  useEffect(() => {
+    try {
+      localStorage.setItem('current_chat_messages', JSON.stringify(messages));
+    } catch (e) {
+      console.error('Failed to save messages to localStorage', e);
+    }
+  }, [messages]);
   const [sessionId, setSessionId] = useState<string | undefined>(() => {
     try {
       return localStorage.getItem('session_id') || undefined;
@@ -155,13 +170,32 @@ export default function Index() {
   }, [activeChat]);
 
   const saveMessages = (chatId: string, msgs: Message[]) => {
-    try { localStorage.setItem(`cc_chat_messages_${chatId}`, JSON.stringify(msgs)); } catch {}
+    try {
+      localStorage.setItem(`chat_${chatId}`, JSON.stringify(msgs));
+      // Also update the current chat messages if this is the active chat
+      if (chatId === activeChat) {
+        localStorage.setItem('current_chat_messages', JSON.stringify(msgs));
+      }
+    } catch (error) {
+      console.error('Error saving messages:', error);
+    }
   };
+
   const loadMessages = (chatId: string): Message[] => {
     try {
-      const raw = localStorage.getItem(`cc_chat_messages_${chatId}`);
-      return raw ? (JSON.parse(raw) as Message[]) : [];
-    } catch { return []; }
+      const saved = localStorage.getItem(`chat_${chatId}`);
+      const loadedMessages = saved ? JSON.parse(saved) : [];
+      
+      // If loading the current chat, update the messages state
+      if (chatId === activeChat) {
+        setMessages(loadedMessages);
+      }
+      
+      return loadedMessages;
+    } catch (error) {
+      console.error('Error loading messages:', error);
+      return [];
+    }
   };
 
   const nowLabel = () => new Date().toLocaleString();
@@ -170,93 +204,47 @@ export default function Index() {
   const handleSendMessage = async (content: string) => {
     const text = content.trim();
     if (!text) return;
-    // Auto-hide sidebar while chatting
+
+    // Hide sidebar while chatting
     setSidebarOpen(false);
 
-    // Determine if this is a /search and prepare a user-visible display text without JSON/code blocks
-    const searchMatchEarly = text.match(/^\s*\/search\s+(.+)/i);
-    const stripCodeFences = (t: string) => t.replace(/```[\s\S]*?```/g, '[omitted]');
-    const displayText = searchMatchEarly
-      ? `Search: ${searchMatchEarly[1].trim()}`
-      : stripCodeFences(text);
-
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      content: displayText,
+    // Append user message
+    const userMsg: Message = {
+      id: `msg-${Date.now()}`,
+      content: text,
       sender: 'user',
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      timestamp: new Date().toISOString(),
     };
-
-    // Append user message first
-    setMessages(prev => {
-      const next = [...prev, userMessage];
-      if (activeChat !== 'current') saveMessages(activeChat, next);
-      return next;
-    });
-
-    // Ensure a chat exists in list for this conversation
-    if (activeChat === 'current') {
-      const newId = `chat-${Date.now()}`;
-      setActiveChat(newId);
-      const title = userMessage.content.split('\n')[0].slice(0, 40) || 'New Chat';
-      const newChat: Chat = { id: newId, title, timestamp: nowLabel(), preview: previewFrom(userMessage.content) };
-      setChats(prev => [newChat, ...prev]);
-    } else {
-      setChats(prev => prev.map(c => c.id === activeChat ? {
-        ...c,
-        title: c.title && c.title !== 'New Chat' ? c.title : (userMessage.content.split('\n')[0].slice(0, 40) || 'New Chat'),
-        preview: previewFrom(userMessage.content),
-        timestamp: nowLabel(),
-      } : c));
-    }
-
-    // Create a streaming bot message placeholder
-    const botId = (Date.now() + 1).toString();
-    const initialBot: Message = {
+    // Bot placeholder (streaming)
+    const botId = `msg-${Date.now() + 1}`;
+    const botMsg: Message = {
       id: botId,
       content: '',
       sender: 'bot',
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      timestamp: new Date().toISOString(),
       streaming: true,
     };
-    // Auto-hide sidebar when bot starts streaming
-    setSidebarOpen(false);
-    setMessages(prev => {
-      const next = [...prev, initialBot];
+
+    setMessages((prev) => {
+      const next = [...prev, userMsg, botMsg];
       if (activeChat !== 'current') saveMessages(activeChat, next);
       return next;
     });
 
-    // Build final text with optional web search context
-    let finalText = text;
-    const searchMatch = text.match(/^\s*\/search\s+(.+)/i);
-    if (searchMatch) {
-      const query = searchMatch[1].trim();
-      try {
-        const results = await webSearch(query, 5);
-        const header = `Web search results for: ${query}\n\n`;
-        const formatted = results.map((r, i) => `[${i + 1}] ${r.title}\n${r.url}\n${r.content.slice(0, 400)}...`).join('\n\n');
-        const guidance = `\n\nUse the results above to answer. Cite sources like [1], [2]. If info is insufficient, say so.\n\n`;
-        finalText = `${header}${formatted}${guidance}Question: ${query}`;
-      } catch {
-        // If search fails, proceed with original text (without the /search prefix)
-        finalText = searchMatch[1].trim();
-      }
-    }
+    // Streaming via backend memory (session_id)
+    const controller = new AbortController();
+    setAbortCtrl(controller);
+    setIsTyping(true);
 
     try {
-      setIsTyping(true);
-      const controller = new AbortController();
-      setAbortCtrl(controller);
-      const { session_id: newSession, text: fullText } = await streamChat(finalText, {
+      const { session_id: newSession, text: fullText } = await streamChat(text, {
         session_id: sessionId,
         apiKey,
+        signal: controller.signal,
         onChunk: (chunk) => {
-          // Ensure sidebar stays hidden while streaming
-          setSidebarOpen(false);
-          setMessages(prev => {
+          setMessages((prev) => {
             const next = [...prev];
-            const idx = next.findIndex(m => m.id === botId);
+            const idx = next.findIndex((m) => m.id === botId);
             if (idx !== -1) {
               next[idx] = { ...next[idx], content: next[idx].content + chunk };
             }
@@ -264,29 +252,27 @@ export default function Index() {
             return next;
           });
         },
-        signal: controller.signal,
       });
 
+      // Persist session id for context
       if (!sessionId && newSession) {
         setSessionId(newSession);
         try { localStorage.setItem('session_id', newSession); } catch {}
-        setChats(prev => prev.map(c => c.id === activeChat ? { ...c, session_id: newSession } : c));
+        setChats((prev) => prev.map((c) => (c.id === activeChat ? { ...c, session_id: newSession } : c)));
       }
 
-      // Finalize the bot message (stop streaming)
-      setMessages(prev => {
-        const next = prev.map(m => m.id === botId ? { ...m, streaming: false } : m);
+      // Finalize bot message
+      setMessages((prev) => {
+        const next = prev.map((m) => (m.id === botId ? { ...m, streaming: false } : m));
         if (activeChat !== 'current') saveMessages(activeChat, next);
         return next;
       });
 
-      // Update chat preview and auto-title from first assistant reply
-      setChats(prev => prev.map(c => {
+      // Update chat preview/title
+      setChats((prev) => prev.map((c) => {
         if (c.id !== activeChat) return c;
         const firstLine = (fullText || '').split('\n')[0].trim();
-        const newTitle = (c.title === 'New Chat' || !c.title || c.title.trim() === '')
-          ? (firstLine.slice(0, 40) || c.title)
-          : c.title;
+        const newTitle = c.title === 'New Chat' || !c.title?.trim() ? (firstLine.slice(0, 40) || c.title) : c.title;
         return {
           ...c,
           title: newTitle,
@@ -298,8 +284,8 @@ export default function Index() {
     } catch (e: any) {
       const aborted = e?.name === 'AbortError';
       const errText = aborted ? 'Generation stopped.' : `Error: ${e?.message || 'Failed to get response'}`;
-      setMessages(prev => {
-        const next = prev.map(m => m.id === botId ? { ...m, streaming: false, content: errText } : m);
+      setMessages((prev) => {
+        const next = prev.map((m) => (m.id === botId ? { ...m, streaming: false, content: errText } : m));
         if (activeChat !== 'current') saveMessages(activeChat, next);
         return next;
       });
@@ -308,6 +294,8 @@ export default function Index() {
       setAbortCtrl(null);
     }
   };
+
+// (cleaned duplicate/broken block removed)
 
   const handleStop = () => {
     try { abortCtrl?.abort(); } catch {}
@@ -361,9 +349,7 @@ export default function Index() {
   };
 
   return (
-    <div className="h-[100dvh] sm:h-screen flex overflow-hidden relative">
-      {/* 3D Background */}
-      <Background3D />
+    <div className="h-[100dvh] sm:h-screen flex overflow-hidden bg-white">
 
       {/* Main Layout */}
       <div className="flex w-full relative z-10 min-h-0">
@@ -409,41 +395,7 @@ export default function Index() {
         </motion.main>
       </div>
 
-      {/* Loading overlay for initial animation */}
-      <motion.div
-        initial={{ opacity: 1 }}
-        animate={{ opacity: 0 }}
-        transition={{ duration: 1, delay: 0.5 }}
-        className="fixed inset-0 bg-background z-50 flex items-center justify-center pointer-events-none"
-      >
-        <motion.div
-          initial={{ scale: 0.8, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ duration: 0.5 }}
-          className="text-center"
-        >
-          <motion.div
-            className="relative w-16 h-16 mx-auto mb-4"
-            animate={{ scale: [1, 1.05, 1], filter: ['brightness(1)', 'brightness(1.2)', 'brightness(1)'] }}
-            transition={{ duration: 1.2, repeat: Infinity, ease: 'easeInOut' }}
-          >
-            {/* Pulsing ring */}
-            <motion.span
-              className="absolute inset-0 -m-1 rounded-full"
-              style={{ boxShadow: '0 0 0 0 rgba(99,102,241,0.35)' }}
-              animate={{ boxShadow: ['0 0 0 0 rgba(99,102,241,0.35)', '0 0 0 16px rgba(99,102,241,0)', '0 0 0 0 rgba(99,102,241,0)'] }}
-              transition={{ duration: 1.6, repeat: Infinity, ease: 'easeOut' }}
-            />
-            <div className="w-full h-full border-2 border-primary border-t-transparent rounded-full animate-spin" />
-          </motion.div>
-          <div className="flex items-center justify-center gap-1 text-sm text-muted-foreground">
-            <span>Initializing Swea Chat</span>
-            <motion.span className="h-1.5 w-1.5 rounded-full bg-current" animate={{ opacity: [0.2, 1, 0.2] }} transition={{ duration: 0.9, repeat: Infinity }} />
-            <motion.span className="h-1.5 w-1.5 rounded-full bg-current" animate={{ opacity: [0.2, 1, 0.2] }} transition={{ duration: 0.9, repeat: Infinity, delay: 0.15 }} />
-            <motion.span className="h-1.5 w-1.5 rounded-full bg-current" animate={{ opacity: [0.2, 1, 0.2] }} transition={{ duration: 0.9, repeat: Infinity, delay: 0.3 }} />
-          </div>
-        </motion.div>
-      </motion.div>
+      
     </div>
   );
 }
