@@ -24,6 +24,8 @@ interface SidebarProps {
   onReuseChat?: (chatId: string) => void;
   onDuplicateChat?: (chatId: string) => void;
   onClearMemory?: () => void;
+  showThinking?: boolean;
+  onToggleShowThinking?: (value: boolean) => void;
 }
 
 export default function Sidebar({
@@ -38,8 +40,10 @@ export default function Sidebar({
   onReuseChat,
   onDuplicateChat,
   onClearMemory,
+  showThinking,
+  onToggleShowThinking,
 }: SidebarProps) {
-  const [hoveredChat, setHoveredChat] = useState<string | null>(null);
+  // removed hoveredChat to reduce re-renders during pointer movements
 
   return (
     <>
@@ -63,23 +67,17 @@ export default function Sidebar({
           x: isOpen ? 0 : '-100%',
           width: isOpen ? '320px' : '0px'
         }}
-        transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+        transition={{ duration: 0.18, ease: 'easeOut' }}
         className="fixed left-0 top-0 h-full sidebar-glass border-r border-glass-border/20 z-50 lg:relative lg:translate-x-0 overflow-hidden"
-        style={{ width: isOpen ? '320px' : '0px' }}
-      >
+        style={{ width: isOpen ? '320px' : '0px', willChange: 'transform, width', pointerEvents: isOpen ? 'auto' : 'none' }}
+     >
+        {isOpen && (
         <div className="flex flex-col h-full p-4">
           {/* Header */}
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
               <HolographicAvatar size="sm" />
-              <motion.h2 
-                className="text-lg font-semibold bg-gradient-holographic bg-clip-text text-transparent"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.2 }}
-              >
-                Swea Chat
-              </motion.h2>
+              <h2 className="text-lg font-semibold bg-gradient-holographic bg-clip-text text-transparent">Swea Chat</h2>
             </div>
             <Button
               variant="ghost"
@@ -112,74 +110,47 @@ export default function Sidebar({
               Recent Chats
             </h3>
             <div className="space-y-2">
-              <AnimatePresence>
-                {chats.map((chat, index) => (
-                  <motion.div
-                    key={chat.id}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -20 }}
-                    transition={{ delay: index * 0.05 }}
-                    className={`
-                      p-3 rounded-lg cursor-pointer transition-all duration-300
-                      ${activeChat === chat.id 
-                        ? 'glass border-primary/50 bg-primary/10' 
-                        : 'hover:glass hover:border-primary/30'
-                      }
-                    `}
-                    onMouseEnter={() => setHoveredChat(chat.id)}
-                    onMouseLeave={() => setHoveredChat(null)}
-                    onClick={() => onSelectChat(chat.id)}
-                    whileHover={{ x: 4 }}
-                  >
-                    <div className="flex items-start gap-3">
-                      <MessageSquare className="h-4 w-4 text-primary mt-1 flex-shrink-0" />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium text-foreground truncate">
-                          {chat.title}
-                        </p>
-                        <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                          {chat.preview}
-                        </p>
-                        <p className="text-xs text-muted-foreground/70 mt-2">
-                          {chat.timestamp}
-                        </p>
-                      </div>
-                      {/* Actions */}
-                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button
-                          type="button"
-                          className="p-1 rounded hover:bg-primary/10"
-                          title="Reuse prompt"
-                          onClick={(e) => { e.stopPropagation(); onReuseChat?.(chat.id); }}
-                        >
-                          <RotateCcw className="h-3.5 w-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          className="p-1 rounded hover:bg-primary/10"
-                          title="Duplicate chat"
-                          onClick={(e) => { e.stopPropagation(); onDuplicateChat?.(chat.id); }}
-                        >
-                          <Copy className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
+              {chats.map((chat) => (
+                <div
+                  key={chat.id}
+                  className={`
+                    relative p-3 rounded-lg cursor-pointer transition-colors duration-150
+                    ${activeChat === chat.id 
+                      ? 'glass border-primary/50 bg-primary/10' 
+                      : 'hover:glass hover:border-primary/30'
+                    }
+                  `}
+                  onClick={() => onSelectChat(chat.id)}
+                >
+                  <div className="flex items-start gap-3">
+                    <MessageSquare className="h-4 w-4 text-primary mt-1 flex-shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-foreground truncate">{chat.title}</p>
+                      <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{chat.preview}</p>
+                      <p className="text-xs text-muted-foreground/70 mt-2">{chat.timestamp}</p>
                     </div>
-                    
-                    {/* Hover glow effect */}
-                    <AnimatePresence>
-                      {hoveredChat === chat.id && (
-                        <motion.div
-                          initial={{ opacity: 0, scale: 0.8 }}
-                          animate={{ opacity: 1, scale: 1 }}
-                          exit={{ opacity: 0, scale: 0.8 }}
-                          className="absolute inset-0 bg-primary/5 rounded-lg pointer-events-none"
-                        />
-                      )}
-                    </AnimatePresence>
-                  </motion.div>
-                ))}
-              </AnimatePresence>
+                    {/* Actions */}
+                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        type="button"
+                        className="p-1 rounded hover:bg-primary/10"
+                        title="Reuse prompt"
+                        onClick={(e) => { e.stopPropagation(); onReuseChat?.(chat.id); }}
+                      >
+                        <RotateCcw className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        className="p-1 rounded hover:bg-primary/10"
+                        title="Duplicate chat"
+                        onClick={(e) => { e.stopPropagation(); onDuplicateChat?.(chat.id); }}
+                      >
+                        <Copy className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
 
@@ -202,7 +173,22 @@ export default function Sidebar({
               <p className="text-[10px] text-muted-foreground mt-1">Stored locally in your browser. Not sent to server except with your chat requests.</p>
             </div>
 
-            
+            {/* Show Thinking Toggle */}
+            <div className="mb-4 flex items-center justify-between px-1">
+              <div>
+                <div className="text-sm font-medium text-foreground">Show Thinking</div>
+                <div className="text-xs text-muted-foreground">Display brief reasoning panel in replies</div>
+              </div>
+              <label className="inline-flex items-center gap-2 cursor-pointer">
+                <Input
+                  type="checkbox"
+                  checked={!!showThinking}
+                  onChange={(e) => onToggleShowThinking?.(e.target.checked)}
+                  className="w-4 h-4"
+                />
+              </label>
+            </div>
+
             {/* Clear Memory */}
             <Button
               variant="ghost"
@@ -232,6 +218,7 @@ export default function Sidebar({
             </Button>
           </motion.div>
         </div>
+        )}
       </motion.aside>
     </>
   );

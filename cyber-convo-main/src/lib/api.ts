@@ -101,6 +101,7 @@ export async function streamChat(
     onChunk,
     signal,
     model,
+    showThinkingSummary,
   }: {
     session_id?: string;
     system_prompt?: string;
@@ -108,6 +109,7 @@ export async function streamChat(
     onChunk?: (text: string) => void;
     signal?: AbortSignal;
     model?: string;
+    showThinkingSummary?: boolean;
   }
 ): Promise<{ session_id?: string; text: string }> {
   const res = await fetch(api('/api/chat/stream'), {
@@ -115,7 +117,7 @@ export async function streamChat(
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ message, system_prompt, session_id, api_key: apiKey, model }),
+    body: JSON.stringify({ message, system_prompt, session_id, api_key: apiKey, model, show_thinking_summary: showThinkingSummary }),
     signal,
   });
 

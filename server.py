@@ -16,7 +16,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY") or os.getenv("API_KEY")
-OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "z-ai/glm-4.5-air:free")
+OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "deepseek/deepseek-chat-v3.1:free")
 OPENROUTER_BASE_URL = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
 
 UPLOAD_DIR = os.getenv("UPLOAD_DIR", os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads"))
@@ -25,7 +25,10 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY", "").strip()
 
 # Session and memory configuration
-MAX_TURNS = int(os.getenv("MAX_TURNS", "25"))  # number of user-assistant exchanges to keep
+# Lower default MAX_TURNS to reduce prompt size for faster responses; configurable via env.
+MAX_TURNS = int(os.getenv("MAX_TURNS", "10"))  # number of user-assistant exchanges to keep
+# Additionally cap the total characters included from history to avoid very large prompts.
+MAX_PROMPT_CHARS = int(os.getenv("MAX_PROMPT_CHARS", "6000"))
 PERSIST_SESSIONS = os.getenv("PERSIST_SESSIONS", "false").lower() in {"1", "true", "yes"}
 SESSION_STORE_PATH = os.getenv("SESSION_STORE_PATH", os.path.join(os.path.dirname(os.path.abspath(__file__)), "session_store.json"))
 
@@ -42,6 +45,12 @@ try:
         print(f"System prompt file not found at: {SYSTEM_PROMPT_PATH}. Using default.")
 except Exception as e:
     print(f"Failed to load system prompt from file: {e}. Using default.")
+
+# Optional: ask model to include a brief reasoning summary block (not chain-of-thought)
+SHOW_THINKING_SUMMARY = os.getenv("SHOW_THINKING_SUMMARY", "false").lower() in {"1", "true", "yes"}
+REASONING_GUIDE = (
+    "\n\nWhen responding, first include a short fenced code block labelled 'reasoning' with 2-5 concise bullet points summarizing your approach (no chain-of-thought, no confidential info). After that block, provide the final answer. Example:\n\n```reasoning\n- Identify the key requirement\n- Outline a brief approach\n- Mention any assumptions\n```\n\nThen the final answer follows."
+)
 
 if not OPENROUTER_API_KEY:
     # We don't raise immediately to allow the server to start and return a 500 if missing on calls.
@@ -74,6 +83,8 @@ class ChatRequest(BaseModel):
     clear: bool | None = None
     model: str | None = None
     temperature: float | None = None
+    # Per-request toggle to show a short visible reasoning summary block (```reasoning)
+    show_thinking_summary: bool | None = None
     # Optional per-request OpenRouter API key provided by the client.
     # If omitted, the server will fall back to the environment variable.
     api_key: str | None = None
@@ -134,6 +145,35 @@ def _persist_sessions_to_disk() -> None:
 _load_sessions_from_disk()
 
 
+def _build_messages(system_prompt: str, history: List[Dict[str, Any]], user_message: str) -> List[Dict[str, str]]:
+    """Build messages with limits to keep prompts fast.
+    Applies both MAX_TURNS (last N exchanges) and MAX_PROMPT_CHARS (approx cap by char count).
+    """
+    # First, apply turns cap (2 messages per turn)
+    max_messages = MAX_TURNS * 2
+    trimmed_hist = history[-max_messages:] if max_messages > 0 else history
+
+    # Then, apply character budget from the end (most recent first)
+    budget = max(1000, MAX_PROMPT_CHARS)  # never below 1000 chars
+    accum: List[Dict[str, str]] = []
+    total = 0
+    for msg in reversed(trimmed_hist):
+        content = str(msg.get("content", ""))
+        # Always include at least a small piece of the last few messages
+        if total + len(content) > budget and len(accum) > 0:
+            break
+        accum.append({"role": msg.get("role", "user"), "content": content})
+        total += len(content)
+    accum.reverse()
+
+    messages = [
+        {"role": "system", "content": system_prompt},
+        *accum,
+        {"role": "user", "content": user_message},
+    ]
+    return messages
+
+
 @app.post("/chat", response_model=ChatResponse)
 def chat(req: ChatRequest):
     # Prefer request-provided key, fall back to environment.
@@ -143,6 +183,9 @@ def chat(req: ChatRequest):
         raise HTTPException(status_code=400, detail="OpenRouter API key is required. Provide it in the request (api_key) or set OPENROUTER_API_KEY on the server.")
 
     system_prompt = req.system_prompt or DEFAULT_SYSTEM_PROMPT
+    want_summary = req.show_thinking_summary if req.show_thinking_summary is not None else SHOW_THINKING_SUMMARY
+    if want_summary:
+        system_prompt = (system_prompt + REASONING_GUIDE).strip()
 
     # Determine session id (allow client-provided or generate deterministic per-process)
     session_id = req.session_id or os.urandom(8).hex()
@@ -170,17 +213,15 @@ def chat(req: ChatRequest):
         "Authorization": f"Bearer {effective_api_key}",
         "Content-Type": "application/json",
     }
-    # Build conversation from history
+    # Build conversation from history (trimmed for speed)
     with _SESSION_LOCK:
         history = _SESSIONS.get(session_id, []).copy()
-    messages = [
-        {"role": "system", "content": system_prompt},
-        *history,
-        {"role": "user", "content": req.message},
-    ]
+    messages = _build_messages(system_prompt, history, req.message)
     payload = {
         "model": (req.model or OPENROUTER_MODEL),
         "messages": messages,
+        # Encourage higher reasoning effort on models that support it (ignored otherwise)
+        "reasoning": {"effort": "high"},
     }
     if req.temperature is not None:
         try:
@@ -252,16 +293,14 @@ def chat_stream(req: ChatRequest):
         raise HTTPException(status_code=400, detail="OpenRouter API key is required. Provide it in the request (api_key) or set OPENROUTER_API_KEY on the server.")
 
     system_prompt = req.system_prompt or DEFAULT_SYSTEM_PROMPT
+    if SHOW_THINKING_SUMMARY:
+        system_prompt = (system_prompt + REASONING_GUIDE).strip()
     session_id = req.session_id or os.urandom(8).hex()
 
-    # Build conversation from history
+    # Build conversation from history (trimmed for speed)
     with _SESSION_LOCK:
         history = _SESSIONS.get(session_id, []).copy()
-    messages = [
-        {"role": "system", "content": system_prompt},
-        *history,
-        {"role": "user", "content": req.message},
-    ]
+    messages = _build_messages(system_prompt, history, req.message)
 
     url = f"{OPENROUTER_BASE_URL}/chat/completions"
     headers = {
@@ -272,6 +311,8 @@ def chat_stream(req: ChatRequest):
         "model": (req.model or OPENROUTER_MODEL),
         "messages": messages,
         "stream": True,
+        # Encourage higher reasoning effort on models that support it (ignored otherwise)
+        "reasoning": {"effort": "high"},
     }
     if req.temperature is not None:
         try:

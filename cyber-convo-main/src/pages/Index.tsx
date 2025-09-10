@@ -22,6 +22,8 @@ interface Chat {
 }
 
 export default function Index() {
+  // Default model can be provided via env to prefer faster models
+  const DEFAULT_MODEL: string | undefined = (import.meta as any).env?.VITE_DEFAULT_MODEL || undefined;
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(() => {
     try {
       const saved = localStorage.getItem('cc_sidebar_open');
@@ -30,6 +32,19 @@ export default function Index() {
     // Default: hidden; user can open via toggle
     return false;
   });
+
+  // Show Thinking toggle (visible reasoning panel)
+  const [showThinking, setShowThinking] = useState<boolean>(() => {
+    try {
+      const x = localStorage.getItem('cc_show_thinking');
+      return x ? x === '1' : true; // default on
+    } catch {
+      return true;
+    }
+  });
+  useEffect(() => {
+    try { localStorage.setItem('cc_show_thinking', showThinking ? '1' : '0'); } catch {}
+  }, [showThinking]);
 
   // Temperature removed per request
   const [messages, setMessages] = useState<Message[]>(() => {
@@ -241,6 +256,8 @@ export default function Index() {
         session_id: sessionId,
         apiKey,
         signal: controller.signal,
+        model: DEFAULT_MODEL,
+        showThinkingSummary: showThinking,
         onChunk: (chunk) => {
           setMessages((prev) => {
             const next = [...prev];
@@ -366,6 +383,8 @@ export default function Index() {
           onReuseChat={handleReuseChat}
           onDuplicateChat={handleDuplicateChat}
           onClearMemory={handleClearMemory}
+          showThinking={showThinking}
+          onToggleShowThinking={setShowThinking}
         />
 
         {/* Main Chat Area */}

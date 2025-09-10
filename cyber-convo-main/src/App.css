@@ -1,8 +1,19 @@
+/* Ensure full-bleed layout on mobile (remove default margins) */
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overscroll-behavior-y: contain;
+  background: #fff;
+}
+
 #root {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
+  /* Make the app edge-to-edge on mobile */
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  text-align: initial;
 }
 
 .logo {

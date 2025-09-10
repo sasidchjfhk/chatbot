@@ -214,6 +214,23 @@ export default function MessageBubble({ message, isLast }: MessageBubbleProps) {
           setTimeout(() => setCopiedBlock(prev => (prev === k ? null : prev)), 1500);
         } catch {}
       };
+      // Special rendering for reasoning blocks (visible thinking summary)
+      if ((lang || '').toLowerCase() === 'reasoning') {
+        const lines = code
+          .split(/\r?\n/)
+          .map(l => l.trim())
+          .filter(Boolean);
+        return (
+          <div key={k} className="my-2 p-3 rounded-xl border border-primary/20 bg-primary/5">
+            <div className="text-xs font-semibold text-primary mb-1">Thinking</div>
+            <ul className="list-disc list-inside text-sm text-foreground/80 space-y-1">
+              {lines.map((l, i) => (
+                <li key={i}>{l.replace(/^[-*]\s*/, '')}</li>
+              ))}
+            </ul>
+          </div>
+        );
+      }
       const langKey = normalizeLang(lang);
       let highlighted = code;
       try {
@@ -287,13 +304,54 @@ export default function MessageBubble({ message, isLast }: MessageBubbleProps) {
           whileHover={prefersReducedMotion ? undefined : { scale: isPlaceholder ? 1 : 1.01 }}
           transition={{ duration: prefersReducedMotion ? 0.15 : 0.2 }}
         >
+          {/* Hyper Thinking animated background (visual only, no CoT) */}
+          {!isUser && message.streaming && (
+            <>
+              <style>
+                {`
+                @keyframes bgMove {
+                  0% { transform: translateY(0); }
+                  100% { transform: translateY(-40%); }
+                }
+                `}
+              </style>
+              <div className="absolute inset-0 rounded-2xl overflow-hidden pointer-events-none select-none">
+                {/* Moving scanlines */}
+                <div
+                  className="absolute -inset-8 opacity-20"
+                  style={{
+                    background:
+                      'repeating-linear-gradient( to bottom, rgba(99,102,241,0.08) 0px, rgba(99,102,241,0.08) 2px, transparent 2px, transparent 8px )',
+                    animation: 'bgMove 6s linear infinite',
+                  }}
+                />
+                {/* Soft radial glow */}
+                <div
+                  className="absolute inset-0"
+                  style={{
+                    background:
+                      'radial-gradient(100% 60% at 50% 0%, rgba(99,102,241,0.18), transparent 60%)',
+                    mixBlendMode: 'multiply',
+                  }}
+                />
+              </div>
+            </>
+          )}
           {/* Message Text with linkified URLs and clickable citations */}
           {isPlaceholder ? (
             prefersReducedMotion ? (
               <span className="inline-block w-8 h-2.5 rounded-full bg-foreground/30 animate-blink-simple" />
             ) : (
-              <span className="inline-flex items-center" aria-label="AI is thinking" role="status">
+              <span className="inline-flex items-center gap-2" aria-label="AI is thinking" role="status">
                 <span className="thinking-pill w-14 h-3" />
+                <span className="text-xs text-muted-foreground/80 select-none">
+                  Hyper thinking…
+                  <span className="inline-flex gap-0.5 ml-1 align-middle">
+                    <span className="h-1.5 w-1.5 rounded-full bg-primary/70 animate-pulse" style={{ animationDelay: '0ms' }} />
+                    <span className="h-1.5 w-1.5 rounded-full bg-primary/70 animate-pulse" style={{ animationDelay: '150ms' }} />
+                    <span className="h-1.5 w-1.5 rounded-full bg-primary/70 animate-pulse" style={{ animationDelay: '300ms' }} />
+                  </span>
+                </span>
               </span>
             )
           ) : (
