@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, MessageSquare, Settings, User, Menu, X, Copy, RotateCcw } from 'lucide-react';
+import { Plus, MessageSquare, Settings, User, Menu, X, Copy, RotateCcw, Sun, Moon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import HolographicAvatar from './HolographicAvatar';
 import { Input } from '@/components/ui/input';
+import { useTheme } from 'next-themes';
 
 interface Chat {
   id: string;
@@ -26,6 +27,8 @@ interface SidebarProps {
   onClearMemory?: () => void;
   showThinking?: boolean;
   onToggleShowThinking?: (value: boolean) => void;
+  currentModel?: string;
+  onChangeModel?: (value: string) => void;
 }
 
 export default function Sidebar({
@@ -42,8 +45,11 @@ export default function Sidebar({
   onClearMemory,
   showThinking,
   onToggleShowThinking,
+  currentModel,
+  onChangeModel,
 }: SidebarProps) {
   // removed hoveredChat to reduce re-renders during pointer movements
+  const { theme, setTheme } = useTheme();
 
   return (
     <>
@@ -173,6 +179,18 @@ export default function Sidebar({
               <p className="text-[10px] text-muted-foreground mt-1">Stored locally in your browser. Not sent to server except with your chat requests.</p>
             </div>
 
+            {/* Model Selector */}
+            <div className="mb-4">
+              <label className="text-xs text-muted-foreground mb-1 block">Model</label>
+              <Input
+                type="text"
+                placeholder="e.g. deepseek/deepseek-chat-v3.1:free"
+                value={currentModel || ''}
+                onChange={(e) => onChangeModel?.(e.target.value)}
+              />
+              <p className="text-[10px] text-muted-foreground mt-1">Overrides default when set.</p>
+            </div>
+
             {/* Show Thinking Toggle */}
             <div className="mb-4 flex items-center justify-between px-1">
               <div>
@@ -199,6 +217,18 @@ export default function Sidebar({
               <RotateCcw className="h-4 w-4 mr-2" />
               Clear memory
             </Button>
+
+            {/* Theme Toggle */}
+            <Button
+              variant="ghost"
+              className="w-full justify-start text-muted-foreground hover:text-primary hover:bg-primary/10 mb-2"
+              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+              title="Toggle theme"
+            >
+              {theme === 'dark' ? <Sun className="h-4 w-4 mr-2" /> : <Moon className="h-4 w-4 mr-2" />}
+              Toggle theme
+            </Button>
+
             <div className="flex items-center gap-3 p-3 rounded-lg glass border border-glass-border/20 mb-3">
               <div className="w-8 h-8 rounded-full bg-gradient-primary flex items-center justify-center">
                 <User className="h-4 w-4 text-primary-foreground" />

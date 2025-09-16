@@ -4,6 +4,7 @@ import Sidebar from '@/components/Sidebar';
 import ChatArea from '@/components/ChatArea';
 import ChatInput from '@/components/ChatInput';
 import { sendChat, streamChat, webSearch, clearMemory, type WebResult } from '@/lib/api';
+import { toast } from 'sonner';
 
 interface Message {
   id: string;
@@ -32,6 +33,23 @@ export default function Index() {
     // Default: hidden; user can open via toggle
     return false;
   });
+
+  // Model selection with persistence
+  const [selectedModel, setSelectedModel] = useState<string | undefined>(() => {
+    try {
+      return localStorage.getItem('cc_model') || undefined;
+    } catch {
+      return undefined;
+    }
+  });
+  const handleModelChange = (m: string) => {
+    const v = (m || '').trim();
+    setSelectedModel(v || undefined);
+    try {
+      if (v) localStorage.setItem('cc_model', v);
+      else localStorage.removeItem('cc_model');
+    } catch {}
+  };
 
   // Show Thinking toggle (visible reasoning panel)
   const [showThinking, setShowThinking] = useState<boolean>(() => {
@@ -105,6 +123,7 @@ export default function Index() {
       }
     } catch (e) {
       // Non-fatal: even if server clear fails, still clear local state
+      toast.error((e as any)?.message || 'Failed to clear memory on server');
     }
     // Clear local messages for the active chat
     setMessages([]);
@@ -256,7 +275,7 @@ export default function Index() {
         session_id: sessionId,
         apiKey,
         signal: controller.signal,
-        model: DEFAULT_MODEL,
+        model: (selectedModel || DEFAULT_MODEL),
         showThinkingSummary: showThinking,
         onChunk: (chunk) => {
           setMessages((prev) => {
@@ -301,6 +320,7 @@ export default function Index() {
     } catch (e: any) {
       const aborted = e?.name === 'AbortError';
       const errText = aborted ? 'Generation stopped.' : `Error: ${e?.message || 'Failed to get response'}`;
+      if (!aborted) toast.error(e?.message || 'Failed to get response');
       setMessages((prev) => {
         const next = prev.map((m) => (m.id === botId ? { ...m, streaming: false, content: errText } : m));
         if (activeChat !== 'current') saveMessages(activeChat, next);
@@ -385,6 +405,8 @@ export default function Index() {
           onClearMemory={handleClearMemory}
           showThinking={showThinking}
           onToggleShowThinking={setShowThinking}
+          currentModel={selectedModel || DEFAULT_MODEL}
+          onChangeModel={handleModelChange}
         />
 
         {/* Main Chat Area */}
@@ -401,6 +423,7 @@ export default function Index() {
             sidebarOpen={sidebarOpen}
             onSuggestionClick={handleSuggestionClick}
             onNewChat={handleNewChat}
+            modelBadge={selectedModel || DEFAULT_MODEL}
           />
           
           <ChatInput

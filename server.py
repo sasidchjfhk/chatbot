@@ -62,6 +62,9 @@ app = FastAPI(title="Chatbot Backend", version="1.0.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
+        "http://localhost:8080",
+        "http://127.0.0.1:8080",
+        "http://[::1]:8080",
         "http://localhost:8081",
         "http://127.0.0.1:8081",
         "http://[::1]:8081",
@@ -257,7 +260,21 @@ def chat(req: ChatRequest):
 async def upload(files: List[UploadFile] = File(...)):
     """Accept multiple file uploads and return their public URLs under /uploads.
     Intended for images and documents. Files are saved with a random prefix to avoid collisions.
+    Enforces simple size and content-type checks configurable via env.
     """
+    # Upload constraints (configurable via env)
+    try:
+        max_mb = max(1, int(os.getenv("MAX_UPLOAD_SIZE_MB", "10")))
+    except Exception:
+        max_mb = 10
+    MAX_BYTES = max_mb * 1024 * 1024
+    allowed_types_env = os.getenv(
+        "ALLOWED_UPLOAD_TYPES",
+        # common images and office/pdf/plain text
+        "image/jpeg,image/png,image/gif,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword,text/plain"
+    )
+    ALLOWED_TYPES = {t.strip().lower() for t in allowed_types_env.split(",") if t.strip()}
+
     saved = []
     for f in files:
         # Sanitize filename
@@ -266,16 +283,29 @@ async def upload(files: List[UploadFile] = File(...)):
         out_name = f"{prefix}_{name}"
         out_path = os.path.join(UPLOAD_DIR, out_name)
         try:
+            content = await f.read()
+            size = len(content)
+            ctype = (f.content_type or "").lower().strip()
+
+            if size > MAX_BYTES:
+                raise HTTPException(status_code=413, detail=f"{name}: file too large ({size} bytes). Max {max_mb} MB")
+
+            # If a type is provided, ensure it's allowed (skip check if backend cannot detect type)
+            if ctype and ALLOWED_TYPES and ctype not in ALLOWED_TYPES:
+                raise HTTPException(status_code=415, detail=f"{name}: content-type '{ctype}' not allowed")
+
             with open(out_path, "wb") as out:
-                content = await f.read()
                 out.write(content)
             saved.append({
                 "name": name,
                 "stored_name": out_name,
                 "url": f"/uploads/{out_name}",
                 "content_type": f.content_type,
-                "size": len(content),
+                "size": size,
             })
+        except HTTPException:
+            # propagate specific errors
+            raise
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to save {name}: {e}")
     return {"files": saved}

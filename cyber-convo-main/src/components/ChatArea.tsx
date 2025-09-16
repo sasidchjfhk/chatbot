@@ -1,4 +1,4 @@
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { Menu, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -20,6 +20,7 @@ interface ChatAreaProps {
   sidebarOpen: boolean;
   onSuggestionClick?: (text: string) => void;
   onNewChat?: () => void;
+  modelBadge?: string;
 }
 
 export default function ChatArea({ 
@@ -29,10 +30,13 @@ export default function ChatArea({
   sidebarOpen,
   onSuggestionClick,
   onNewChat,
+  modelBadge,
 }: ChatAreaProps) {
   const prefersReducedMotion = useReducedMotion();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number | null>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [showScrollLatest, setShowScrollLatest] = useState(false);
 
   const scrollToBottom = () => {
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
@@ -48,6 +52,21 @@ export default function ChatArea({
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
   }, [messages.length]);
+
+  // Track scroll to toggle the "scroll to latest" button
+  useEffect(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    const onScroll = () => {
+      const threshold = 120; // px from bottom
+      const distFromBottom = el.scrollHeight - el.clientHeight - el.scrollTop;
+      setShowScrollLatest(distFromBottom > threshold);
+    };
+    el.addEventListener('scroll', onScroll);
+    // initial
+    onScroll();
+    return () => el.removeEventListener('scroll', onScroll);
+  }, []);
 
   // Removed inline edit feature
 
@@ -91,6 +110,11 @@ export default function ChatArea({
           </div>
 
           <div className="flex items-center gap-2">
+            {modelBadge && (
+              <span className="hidden sm:inline-flex items-center px-2 py-1 text-xs rounded-full border bg-muted/40 text-muted-foreground truncate max-w-[220px]" title={modelBadge}>
+                {modelBadge}
+              </span>
+            )}
             <div className="hidden sm:flex items-center gap-2 px-3 py-1 glass rounded-full border border-glass-border/30">
               <div className="w-2 h-2 rounded-full bg-success animate-pulse" />
               <span className="text-xs text-muted-foreground">Online</span>
@@ -100,7 +124,43 @@ export default function ChatArea({
       </motion.header>
 
       {/* Messages Area */}
-      <div className="flex-1 min-h-0 overflow-y-auto p-2 sm:p-3 space-y-3 sm:space-y-4 pb-28 sm:pb-20">
+      <div ref={scrollContainerRef} className="flex-1 min-h-0 overflow-y-auto p-2 sm:p-3 space-y-3 sm:space-y-4 pb-28 sm:pb-20">
+        {/* Empty state welcome panel */}
+        {messages.length === 0 && (
+          <div className="max-w-3xl mx-auto mt-8 sm:mt-12 p-4 sm:p-6 rounded-2xl border bg-white/70">
+            <div className="flex items-center gap-3 mb-3">
+              <HolographicAvatar size="sm" />
+              <div>
+                <div className="text-lg font-extrabold text-foreground">Welcome to Swea Chat</div>
+                <div className="text-sm text-muted-foreground">Ask anything or try a suggestion below</div>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+              {[
+                'Summarize this article: ',
+                'Explain this code: ',
+                'Draft an email about: ',
+                'Create a study plan for: ',
+                'What is the difference between X and Y?',
+                'Generate ideas for: ',
+              ].map((s, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => onSuggestionClick?.(s)}
+                  className="text-left px-3 py-2 rounded-lg glass border border-glass-border/30 hover:border-primary/50 hover:text-primary transition-colors"
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+            <div className="mt-4">
+              <Button onClick={() => onNewChat?.()} className="btn-holographic">
+                Start new chat
+              </Button>
+            </div>
+          </div>
+        )}
         <AnimatePresence mode="wait">
           <motion.div
             key="messages"
@@ -120,6 +180,18 @@ export default function ChatArea({
         
         <div ref={messagesEndRef} />
       </div>
+
+      {/* Scroll to latest button */}
+      {showScrollLatest && (
+        <button
+          type="button"
+          onClick={scrollToBottom}
+          className="absolute right-4 bottom-24 sm:bottom-16 z-20 px-3 py-1.5 rounded-full shadow glass border border-glass-border/30 text-sm text-foreground hover:text-primary hover:border-primary/50"
+          aria-label="Scroll to latest"
+        >
+          Jump to latest
+        </button>
+      )}
 
       {/* Removed floating elements to avoid layered look */}
     </div>

@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Send, Mic, Paperclip, Sparkles, Search as SearchIcon, Square, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { uploadFiles, type UploadedFile } from '@/lib/api';
+import { toast } from 'sonner';
 
 interface ChatInputProps {
   onSendMessage: (message: string) => void;
@@ -18,6 +19,7 @@ export default function ChatInput({ onSendMessage, disabled, prefill, isTyping, 
   const [isRecording, setIsRecording] = useState(false);
   const [showRocket, setShowRocket] = useState(false);
   const [isThinking, setIsThinking] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<any>(null);
@@ -152,20 +154,89 @@ export default function ChatInput({ onSendMessage, disabled, prefill, isTyping, 
       const uploaded = await uploadFiles(files);
       setAttachments(prev => [...prev, ...uploaded]);
     } catch (err: any) {
-      alert(err?.message || 'Failed to upload files');
+      toast.error(err?.message || 'Failed to upload files');
     } finally {
       // Reset value so selecting the same file again triggers change
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
+  // Drag & Drop upload support
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    if (disabled) return;
+    setIsDragging(true);
+  };
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    if (disabled) return;
+    setIsDragging(false);
+    const files = Array.from(e.dataTransfer.files || []);
+    if (!files.length) return;
+    try {
+      const uploaded = await uploadFiles(files);
+      setAttachments(prev => [...prev, ...uploaded]);
+    } catch (err: any) {
+      alert(err?.message || 'Failed to upload files');
+    }
+  };
+
+  // Paste-to-upload support (for images/files from clipboard)
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    const onPaste = async (e: ClipboardEvent) => {
+      if (disabled) return;
+      if (!e.clipboardData) return;
+      const items = Array.from(e.clipboardData.items || []);
+      const files: File[] = [];
+      for (const item of items) {
+        if (item.kind === 'file') {
+          const f = item.getAsFile();
+          if (f) files.push(f);
+        }
+      }
+      if (!files.length) return;
+      e.preventDefault();
+      try {
+        const uploaded = await uploadFiles(files);
+        setAttachments(prev => [...prev, ...uploaded]);
+      } catch (err: any) {
+        toast.error(err?.message || 'Failed to upload pasted content');
+      }
+    };
+    el.addEventListener('paste', onPaste as any);
+    return () => el.removeEventListener('paste', onPaste as any);
+  }, [disabled]);
+
   return (
     <div
       className="sticky bottom-0 p-3 sm:p-4 glass border-t border-glass-border/20"
       style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 0.75rem)' }}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+      aria-live="polite"
     >
       <div className="max-w-4xl mx-auto">
         <form onSubmit={handleSubmit} className="relative">
+          {/* Drop overlay */}
+          <AnimatePresence>
+            {isDragging && !disabled && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="absolute inset-0 z-20 rounded-2xl border-2 border-dashed border-primary/50 bg-primary/5 flex items-center justify-center"
+              >
+                <div className="text-sm text-primary font-medium">Drop files to upload</div>
+              </motion.div>
+            )}
+          </AnimatePresence>
           <div className="flex items-end gap-2 sm:gap-3">
             {/* Voice Input Button (desktop only) */}
             <motion.div className="hidden sm:block" whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
@@ -198,6 +269,7 @@ export default function ChatInput({ onSendMessage, disabled, prefill, isTyping, 
                 onChange={(e) => setMessage(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder="Type your message..."
+                aria-label="Type your message"
                 disabled={disabled}
                 rows={1}
                 className="
@@ -214,7 +286,7 @@ export default function ChatInput({ onSendMessage, disabled, prefill, isTyping, 
                   maxHeight: '128px'
                 }}
                 onInput={(e) => {
-                  const target = e.target as HTMLTextAreaElement;
+                  const target = (e.target as HTMLTextAreaElement);
                   target.style.height = 'auto';
                   target.style.height = Math.min(target.scrollHeight, 128) + 'px';
                 }}
