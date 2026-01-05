@@ -12,7 +12,7 @@ services:
       - key: OPENROUTER_API_KEY
         sync: false
       - key: OPENROUTER_MODEL
-        value: z-ai/glm-4.5-air:free
+        value: deepseek/deepseek-chat-v3.1:free
       - key: TAVILY_API_KEY
         sync: false
       - key: PERSIST_SESSIONS
